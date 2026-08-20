@@ -1,0 +1,2 @@
+# Minimal requirements for ARPGuard AI
+# Additional packages will be added as module development progresses.
