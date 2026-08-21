@@ -1,26 +1,34 @@
 """
 ARPShield — Feature Engineering Module
 ========================================
-Converts raw ARP packet observations into a structured, windowed ML dataset.
+Converts raw ARP packet observations into a structured ML dataset.
 
-This module reads per-packet ARP data (as produced by the network monitoring
-module) and aggregates it into time-windowed feature vectors suitable for
-anomaly detection.
+This module reads per-packet ARP data as produced by Person 1's network
+monitoring module and engineers features suitable for anomaly detection.
 
-Data Contract (expected input columns):
-    - timestamp:  float (Unix epoch seconds)
-    - op:         int (1 = ARP request, 2 = ARP reply)
-    - src_mac:    string (source MAC address)
-    - dst_mac:    string (destination MAC address)
-    - src_ip:     string (sender IP address)
-    - dst_ip:     string (target IP address)
+Person 1's Data Format (from network/capture_arp.py):
+    - timestamp:   string (ISO datetime, e.g. "2026-08-20 14:52:06")
+    - sender_ip:   string (source/sender IP address)
+    - sender_mac:  string (source/sender MAC address)
+    - target_ip:   string (target IP address)
+    - target_mac:  string (target MAC address)
+    - operation:   string ("request" or "reply")
+    - label:       int (0=normal, 1=attack) — present in final_arp_dataset.csv
+
+The module supports two modes:
+    1. Per-packet features: extract features for each individual packet
+       (matches Person 1's per-record approach)
+    2. Time-windowed features: aggregate packets into time windows
+       (complementary approach for temporal pattern detection)
 
 Output:
-    A CSV file where each row represents one time window with the following
-    engineered features. See FEATURE_DESCRIPTIONS for full documentation.
+    A CSV file where each row represents one observation with engineered
+    features. See FEATURE_DESCRIPTIONS for full documentation.
 
 Usage:
-    python ml/feature_engineering.py [--input PATH] [--output PATH] [--window SECONDS]
+    python ml/feature_engineering.py [--input PATH] [--output PATH]
+                                     [--mode per-packet|windowed]
+                                     [--window SECONDS]
 """
 
 import argparse
@@ -36,62 +44,105 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 FEATURE_DESCRIPTIONS = {
-    "window_start": (
-        "Start timestamp (Unix epoch) of the aggregation window. "
-        "Used as an index; NOT a model feature."
+    # === Per-packet features ===
+    "operation_encoded": (
+        "ARP operation type encoded as integer: 0=request, 1=reply. "
+        "ARP spoofing attacks predominantly use reply packets."
     ),
+    "is_broadcast_target": (
+        "Binary flag: 1 if target MAC is broadcast (ff:ff:ff:ff:ff:ff), "
+        "0 otherwise. Broadcast targets are normal for ARP requests but "
+        "suspicious for unsolicited replies."
+    ),
+    "is_unspecified_target": (
+        "Binary flag: 1 if target IP is 0.0.0.0, 0 otherwise. "
+        "Unspecified target IPs appear in ARP probes and announcements."
+    ),
+    "is_unspecified_sender": (
+        "Binary flag: 1 if sender IP is 0.0.0.0, 0 otherwise. "
+        "Appears in ARP probes during DHCP; unusual in normal traffic."
+    ),
+    "macs_per_ip": (
+        "Number of distinct MAC addresses associated with this packet's "
+        "sender IP across the entire dataset. Values > 1 are a strong "
+        "indicator of ARP spoofing (multiple MACs claiming the same IP)."
+    ),
+    "sender_ip_frequency": (
+        "How many times this sender IP appears in the dataset. "
+        "Extremely high frequency may indicate flooding or scanning."
+    ),
+    "hour": (
+        "Hour of day (0-23) extracted from the packet timestamp. "
+        "Attacks may show temporal patterns (e.g., off-hours activity)."
+    ),
+    "minute": (
+        "Minute of the hour (0-59) from the packet timestamp."
+    ),
+    "second": (
+        "Second of the minute (0-59) from the packet timestamp."
+    ),
+    "is_reply_with_zero_target": (
+        "Binary flag: 1 if the packet is a reply AND the target MAC is "
+        "all zeros (00:00:00:00:00:00). This is suspicious because "
+        "legitimate ARP replies should have a valid target MAC."
+    ),
+
+    # === Windowed features (complementary) ===
     "arp_request_count": (
-        "Number of ARP request packets (op=1) observed in the window. "
+        "Number of ARP request packets in the time window. "
         "Elevated counts may indicate network scanning or probing."
     ),
     "arp_reply_count": (
-        "Number of ARP reply packets (op=2) observed in the window. "
-        "An unusually high reply count, especially without corresponding "
-        "requests, is a strong indicator of ARP spoofing."
+        "Number of ARP reply packets in the time window. "
+        "Reply floods are a classic ARP spoofing indicator."
     ),
     "reply_request_ratio": (
-        "Ratio of ARP replies to ARP requests in the window "
-        "(reply_count / max(request_count, 1)). In normal operation this "
-        "ratio stays near 1.0; values significantly above 1.0 suggest "
-        "unsolicited replies, a hallmark of ARP cache poisoning."
+        "Ratio of replies to requests in the window. "
+        "Values >> 1.0 suggest unsolicited replies (ARP poisoning)."
     ),
     "unique_src_macs": (
-        "Number of distinct source MAC addresses seen in the window. "
-        "A sudden increase may indicate new devices or MAC spoofing."
+        "Distinct source MACs in the window. "
+        "Sudden increase indicates MAC spoofing."
     ),
     "unique_src_ips": (
-        "Number of distinct source IP addresses in the window. "
-        "Helps detect IP spoofing or distributed scanning."
+        "Distinct source IPs in the window."
     ),
     "unique_dst_ips": (
-        "Number of distinct target IPs queried in the window. "
-        "High values indicate network scanning behaviour."
+        "Distinct target IPs in the window. "
+        "High values indicate network scanning."
     ),
     "ip_mac_pair_count": (
-        "Number of distinct (src_ip, src_mac) pairs in the window. "
-        "Instability in IP-MAC mappings is a direct spoofing signal."
+        "Distinct (IP, MAC) pairs in the window. "
+        "Mapping instability is a direct spoofing signal."
     ),
     "max_packets_per_mac": (
-        "Maximum number of packets sent by any single MAC in the window. "
-        "Concentration of traffic from one MAC can indicate a flood attack."
+        "Max packets from a single MAC in the window."
     ),
     "mac_ip_change_count": (
-        "Number of (src_mac, src_ip) pairs where the same MAC address "
-        "claims more than one IP, summed across all MACs. Directly "
-        "measures MAC-to-IP mapping instability — a primary ARP spoofing "
-        "indicator."
+        "MACs claiming multiple IPs in the window. "
+        "Primary ARP spoofing indicator."
     ),
     "unsolicited_reply_ratio": (
-        "Estimated ratio of unsolicited ARP replies. Computed as "
-        "max(0, reply_count - request_count) / max(total_packets, 1). "
-        "This is an approximation since we cannot perfectly match "
-        "request-reply pairs without session tracking. Elevated values "
-        "indicate potential ARP poisoning."
+        "Estimated unsolicited reply proportion in the window."
     ),
 }
 
-# Features used by the model (excludes window_start which is metadata)
-MODEL_FEATURES = [
+# Per-packet features used for primary model (aligns with Person 1's approach)
+PER_PACKET_FEATURES = [
+    "operation_encoded",
+    "is_broadcast_target",
+    "is_unspecified_target",
+    "is_unspecified_sender",
+    "macs_per_ip",
+    "sender_ip_frequency",
+    "hour",
+    "minute",
+    "second",
+    "is_reply_with_zero_target",
+]
+
+# Windowed features (complementary approach)
+WINDOWED_FEATURES = [
     "arp_request_count",
     "arp_reply_count",
     "reply_request_ratio",
@@ -109,8 +160,9 @@ def load_raw_data(filepath: str) -> pd.DataFrame:
     """
     Load raw ARP packet data from CSV.
 
-    Validates that all required columns are present and performs basic
-    type coercion. Malformed or incomplete rows are dropped with a warning.
+    Supports Person 1's data format (columns: timestamp, sender_ip,
+    sender_mac, target_ip, target_mac, operation) and optionally
+    a 'label' column.
 
     Parameters
     ----------
@@ -122,7 +174,8 @@ def load_raw_data(filepath: str) -> pd.DataFrame:
     pd.DataFrame
         Cleaned DataFrame with proper types.
     """
-    required_columns = {"timestamp", "op", "src_mac", "dst_mac", "src_ip", "dst_ip"}
+    required_columns = {"timestamp", "sender_ip", "sender_mac",
+                        "target_ip", "target_mac", "operation"}
 
     if not os.path.isfile(filepath):
         print(f"ERROR: Input file not found: {filepath}")
@@ -135,20 +188,17 @@ def load_raw_data(filepath: str) -> pd.DataFrame:
     if missing:
         print(f"ERROR: Missing required columns: {missing}")
         print(f"  Found columns: {list(df.columns)}")
-        print("  Expected: timestamp, op, src_mac, dst_mac, src_ip, dst_ip")
+        print("  Expected: timestamp, sender_ip, sender_mac, "
+              "target_ip, target_mac, operation")
         sys.exit(1)
 
     original_len = len(df)
 
-    # Coerce types
-    df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
-    df["op"] = pd.to_numeric(df["op"], errors="coerce")
+    # Parse timestamp
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
     # Drop rows with missing critical fields
-    df = df.dropna(subset=["timestamp", "op", "src_mac", "src_ip"])
-
-    # Ensure op is integer
-    df["op"] = df["op"].astype(int)
+    df = df.dropna(subset=["timestamp", "operation", "sender_mac", "sender_ip"])
 
     dropped = original_len - len(df)
     if dropped > 0:
@@ -158,6 +208,74 @@ def load_raw_data(filepath: str) -> pd.DataFrame:
     df = df.sort_values("timestamp").reset_index(drop=True)
 
     return df
+
+
+def engineer_per_packet_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Engineer per-packet features from raw ARP data.
+
+    This approach aligns with Person 1's feature engineering but adds
+    additional security-relevant features. Each row in the output
+    corresponds to one ARP packet.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Raw ARP packet data.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with engineered features.
+    """
+    result = pd.DataFrame()
+
+    # Operation encoding: request=0, reply=1
+    result["operation_encoded"] = df["operation"].map(
+        {"request": 0, "reply": 1}
+    ).fillna(-1).astype(int)
+
+    # Target MAC flags
+    result["is_broadcast_target"] = (
+        df["target_mac"].str.lower() == "ff:ff:ff:ff:ff:ff"
+    ).astype(int)
+
+    result["is_unspecified_target"] = (
+        df["target_ip"] == "0.0.0.0"
+    ).astype(int)
+
+    result["is_unspecified_sender"] = (
+        df["sender_ip"] == "0.0.0.0"
+    ).astype(int)
+
+    # IP-MAC mapping: how many unique MACs per sender IP
+    result["macs_per_ip"] = (
+        df.groupby("sender_ip")["sender_mac"]
+        .transform("nunique")
+    )
+
+    # Sender IP frequency
+    result["sender_ip_frequency"] = (
+        df.groupby("sender_ip")["sender_ip"]
+        .transform("count")
+    )
+
+    # Time-based features
+    result["hour"] = df["timestamp"].dt.hour
+    result["minute"] = df["timestamp"].dt.minute
+    result["second"] = df["timestamp"].dt.second
+
+    # Suspicious combination: reply with zero target MAC
+    result["is_reply_with_zero_target"] = (
+        (df["operation"] == "reply") &
+        (df["target_mac"] == "00:00:00:00:00:00")
+    ).astype(int)
+
+    # Preserve label if present (for evaluation)
+    if "label" in df.columns:
+        result["label"] = df["label"].values
+
+    return result
 
 
 def compute_window_features(window_df: pd.DataFrame) -> dict:
@@ -177,36 +295,29 @@ def compute_window_features(window_df: pd.DataFrame) -> dict:
     total_packets = len(window_df)
 
     if total_packets == 0:
-        return {feat: 0 for feat in MODEL_FEATURES}
+        return {feat: 0 for feat in WINDOWED_FEATURES}
 
-    requests = window_df[window_df["op"] == 1]
-    replies = window_df[window_df["op"] == 2]
+    requests = window_df[window_df["operation"] == "request"]
+    replies = window_df[window_df["operation"] == "reply"]
 
     request_count = len(requests)
     reply_count = len(replies)
 
-    # Reply-to-request ratio
     reply_request_ratio = reply_count / max(request_count, 1)
 
-    # Unique entities
-    unique_src_macs = window_df["src_mac"].nunique()
-    unique_src_ips = window_df["src_ip"].nunique()
-    unique_dst_ips = window_df["dst_ip"].nunique()
+    unique_src_macs = window_df["sender_mac"].nunique()
+    unique_src_ips = window_df["sender_ip"].nunique()
+    unique_dst_ips = window_df["target_ip"].nunique()
 
-    # IP-MAC pair instability
-    ip_mac_pairs = window_df[["src_ip", "src_mac"]].drop_duplicates()
+    ip_mac_pairs = window_df[["sender_ip", "sender_mac"]].drop_duplicates()
     ip_mac_pair_count = len(ip_mac_pairs)
 
-    # Max packets from a single MAC
-    mac_counts = window_df["src_mac"].value_counts()
+    mac_counts = window_df["sender_mac"].value_counts()
     max_packets_per_mac = mac_counts.max() if len(mac_counts) > 0 else 0
 
-    # MAC-IP change count: for each MAC, how many distinct IPs does it claim?
-    # Sum (num_ips - 1) across all MACs to get total "changes"
-    mac_to_ips = window_df.groupby("src_mac")["src_ip"].nunique()
+    mac_to_ips = window_df.groupby("sender_mac")["sender_ip"].nunique()
     mac_ip_change_count = int((mac_to_ips - 1).clip(lower=0).sum())
 
-    # Unsolicited reply ratio (approximation)
     excess_replies = max(0, reply_count - request_count)
     unsolicited_reply_ratio = excess_replies / max(total_packets, 1)
 
@@ -224,7 +335,7 @@ def compute_window_features(window_df: pd.DataFrame) -> dict:
     }
 
 
-def engineer_features(
+def engineer_windowed_features(
     df: pd.DataFrame, window_seconds: float = 30.0
 ) -> pd.DataFrame:
     """
@@ -233,37 +344,37 @@ def engineer_features(
     Parameters
     ----------
     df : pd.DataFrame
-        Raw ARP packet data with required columns.
+        Raw ARP packet data with parsed timestamps.
     window_seconds : float
         Duration of each aggregation window in seconds.
 
     Returns
     -------
     pd.DataFrame
-        DataFrame where each row is one time window with engineered features.
+        DataFrame where each row is one time window.
     """
     if len(df) == 0:
         print("  WARNING: Empty input data — returning empty feature set")
-        return pd.DataFrame(columns=["window_start"] + MODEL_FEATURES)
+        return pd.DataFrame(columns=["window_start"] + WINDOWED_FEATURES)
 
-    min_ts = df["timestamp"].min()
-    max_ts = df["timestamp"].max()
+    # Convert to numeric timestamp for windowing
+    ts = df["timestamp"].astype(np.int64) / 1e9  # nanoseconds to seconds
+    min_ts = ts.min()
+    max_ts = ts.max()
 
-    # Create window boundaries
     window_starts = np.arange(min_ts, max_ts + window_seconds, window_seconds)
 
     records = []
     for ws in window_starts:
         we = ws + window_seconds
-        window_data = df[(df["timestamp"] >= ws) & (df["timestamp"] < we)]
+        mask = (ts >= ws) & (ts < we)
+        window_data = df[mask]
         features = compute_window_features(window_data)
         features["window_start"] = ws
         records.append(features)
 
     feature_df = pd.DataFrame(records)
-
-    # Reorder columns: window_start first, then model features
-    feature_df = feature_df[["window_start"] + MODEL_FEATURES]
+    feature_df = feature_df[["window_start"] + WINDOWED_FEATURES]
 
     return feature_df
 
@@ -274,8 +385,8 @@ def main():
     )
     parser.add_argument(
         "--input",
-        default=os.path.join("ml", "data", "sample_arp_data.csv"),
-        help="Path to raw ARP packet CSV (default: ml/data/sample_arp_data.csv)",
+        default=os.path.join("network", "final_arp_dataset.csv"),
+        help="Path to raw ARP packet CSV (default: network/final_arp_dataset.csv)",
     )
     parser.add_argument(
         "--output",
@@ -283,10 +394,16 @@ def main():
         help="Output path for engineered features (default: ml/data/processed/features.csv)",
     )
     parser.add_argument(
+        "--mode",
+        choices=["per-packet", "windowed"],
+        default="per-packet",
+        help="Feature engineering mode: per-packet (default) or windowed",
+    )
+    parser.add_argument(
         "--window",
         type=float,
         default=30.0,
-        help="Time window in seconds for feature aggregation (default: 30.0)",
+        help="Time window in seconds for windowed mode (default: 30.0)",
     )
     args = parser.parse_args()
 
@@ -295,53 +412,50 @@ def main():
     print("=" * 60)
     print(f"  Input:   {args.input}")
     print(f"  Output:  {args.output}")
-    print(f"  Window:  {args.window}s")
+    print(f"  Mode:    {args.mode}")
+    if args.mode == "windowed":
+        print(f"  Window:  {args.window}s")
     print()
 
     # Load raw data
     print("  Loading raw ARP data...")
     df = load_raw_data(args.input)
     print(f"  Loaded {len(df)} packets")
-    print(f"  Time range: {df['timestamp'].min():.1f} — {df['timestamp'].max():.1f}")
-    print(f"  Duration: {df['timestamp'].max() - df['timestamp'].min():.1f}s")
+    print(f"  Columns: {list(df.columns)}")
+    if "label" in df.columns:
+        label_counts = df["label"].value_counts()
+        print(f"  Labels found: {dict(label_counts)}")
+        print(f"    0 (normal): {label_counts.get(0, 0)}")
+        print(f"    1 (attack): {label_counts.get(1, 0)}")
     print()
 
     # Engineer features
-    print("  Engineering features...")
-    features_df = engineer_features(df, window_seconds=args.window)
-    print(f"  Generated {len(features_df)} time windows")
+    if args.mode == "per-packet":
+        print("  Engineering per-packet features...")
+        features_df = engineer_per_packet_features(df)
+        model_features = PER_PACKET_FEATURES
+    else:
+        print(f"  Engineering windowed features ({args.window}s windows)...")
+        features_df = engineer_windowed_features(df, window_seconds=args.window)
+        model_features = WINDOWED_FEATURES
+
+    print(f"  Generated {len(features_df)} feature vectors")
+    print(f"  Feature columns: {list(features_df.columns)}")
     print()
 
     # Summary statistics
     print("  Feature summary:")
-    for feat in MODEL_FEATURES:
-        vals = features_df[feat]
-        print(f"    {feat:30s}  mean={vals.mean():8.3f}  std={vals.std():8.3f}  "
-              f"min={vals.min():8.3f}  max={vals.max():8.3f}")
+    for feat in model_features:
+        if feat in features_df.columns:
+            vals = features_df[feat]
+            print(f"    {feat:30s}  mean={vals.mean():8.3f}  std={vals.std():8.3f}  "
+                  f"min={vals.min():8.3f}  max={vals.max():8.3f}")
     print()
 
     # Save
     os.makedirs(os.path.dirname(args.output) if os.path.dirname(args.output) else ".", exist_ok=True)
     features_df.to_csv(args.output, index=False)
     print(f"  Saved features to: {args.output}")
-    print()
-
-    # Print feature documentation
-    print("  Feature Descriptions:")
-    for feat in MODEL_FEATURES:
-        desc = FEATURE_DESCRIPTIONS.get(feat, "No description available.")
-        print(f"    {feat}:")
-        # Word-wrap description
-        words = desc.split()
-        line = "      "
-        for word in words:
-            if len(line) + len(word) + 1 > 76:
-                print(line)
-                line = "      " + word
-            else:
-                line += " " + word if line.strip() else word
-        if line.strip():
-            print(line)
     print()
 
 

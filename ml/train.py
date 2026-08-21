@@ -4,28 +4,23 @@ ARPShield — Model Training Module
 Trains an Isolation Forest anomaly detection model on preprocessed ARP
 network features.
 
-Model Selection Rationale — Isolation Forest:
-    1. Unsupervised: Does not require labelled attack data, which is
-       unavailable at this stage of the project.
-    2. Anomaly-optimised: Explicitly designed for anomaly detection,
-       unlike general-purpose clustering methods.
-    3. Efficient: O(n·log(n)) training complexity; handles the moderate
-       feature space (10 features) effectively.
-    4. Interpretable: Anomaly scores provide a continuous measure of
-       how "unusual" each observation is, supporting downstream risk
-       assessment.
-    5. Low false-positive rate: With proper contamination tuning, IF
-       provides a good balance between sensitivity and specificity.
+This module now works with Person 1's actual captured ARP data, which
+includes 5,000 normal packets and 1,000 simulated attack packets with
+labels (0=normal, 1=attack).
 
-Output:
-    - Trained model saved as joblib artifact
-    - Feature configuration saved as JSON
-    - Training summary printed to stdout
+Model Selection Rationale — Isolation Forest:
+    1. Anomaly-optimised: Explicitly designed for anomaly detection,
+       isolating anomalies via random partitioning (shorter path = anomaly).
+    2. Handles mixed training: Can be trained on mostly-normal data
+       without explicit labels, or can be evaluated against labels.
+    3. Efficient: O(n*log(n)) training; handles the feature space well.
+    4. Interpretable: Anomaly scores provide continuous measure of how
+       "unusual" each observation is.
+    5. Low false-positive rate with proper contamination tuning.
 
 Usage:
     python ml/train.py [--input PATH] [--model-output PATH]
                        [--contamination FLOAT] [--n-estimators INT]
-                       [--random-state INT]
 """
 
 import argparse
@@ -40,12 +35,24 @@ import pandas as pd
 from sklearn.ensemble import IsolationForest
 
 
-# Import canonical feature list
+# Import canonical feature lists
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 try:
-    from feature_engineering import MODEL_FEATURES
+    from feature_engineering import PER_PACKET_FEATURES, WINDOWED_FEATURES
 except ImportError:
-    MODEL_FEATURES = [
+    PER_PACKET_FEATURES = [
+        "operation_encoded",
+        "is_broadcast_target",
+        "is_unspecified_target",
+        "is_unspecified_sender",
+        "macs_per_ip",
+        "sender_ip_frequency",
+        "hour",
+        "minute",
+        "second",
+        "is_reply_with_zero_target",
+    ]
+    WINDOWED_FEATURES = [
         "arp_request_count",
         "arp_reply_count",
         "reply_request_ratio",
@@ -71,21 +78,40 @@ def load_training_data(filepath: str) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Training data with model features.
+        Training data.
     """
     if not os.path.isfile(filepath):
         print(f"ERROR: Training data not found: {filepath}")
         sys.exit(1)
 
     df = pd.read_csv(filepath)
-
-    # Validate features
-    missing = set(MODEL_FEATURES) - set(df.columns)
-    if missing:
-        print(f"ERROR: Missing features in training data: {missing}")
-        sys.exit(1)
-
     return df
+
+
+def detect_features(df: pd.DataFrame) -> list[str]:
+    """
+    Detect which feature set is present in the data.
+
+    Returns
+    -------
+    list[str]
+        Feature column names.
+    """
+    pp_missing = set(PER_PACKET_FEATURES) - set(df.columns)
+    w_missing = set(WINDOWED_FEATURES) - set(df.columns)
+
+    if len(pp_missing) == 0:
+        return PER_PACKET_FEATURES
+    elif len(w_missing) == 0:
+        return WINDOWED_FEATURES
+    else:
+        # Use feature_config if available
+        config_path = os.path.join("ml", "models", "feature_config.json")
+        if os.path.isfile(config_path):
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            return config.get("model_features", PER_PACKET_FEATURES)
+        return [f for f in PER_PACKET_FEATURES if f in df.columns]
 
 
 def train_isolation_forest(
@@ -102,8 +128,7 @@ def train_isolation_forest(
     X : np.ndarray
         Training feature matrix (n_samples, n_features).
     contamination : float
-        Expected proportion of anomalies in the dataset. Range: (0, 0.5].
-        Default 0.05 (5%) is conservative for network anomaly detection.
+        Expected proportion of anomalies in the dataset.
     n_estimators : int
         Number of isolation trees in the ensemble.
     random_state : int
@@ -118,7 +143,7 @@ def train_isolation_forest(
         contamination=contamination,
         n_estimators=n_estimators,
         random_state=random_state,
-        n_jobs=-1,  # Use all available cores
+        n_jobs=-1,
     )
 
     model.fit(X)
@@ -132,17 +157,17 @@ def main():
     parser.add_argument(
         "--input",
         default=os.path.join("ml", "data", "processed", "features_scaled.csv"),
-        help="Path to preprocessed features CSV (default: ml/data/processed/features_scaled.csv)",
+        help="Path to preprocessed features CSV",
     )
     parser.add_argument(
         "--model-output",
         default=os.path.join("ml", "models", "isolation_forest.joblib"),
-        help="Output path for trained model (default: ml/models/isolation_forest.joblib)",
+        help="Output path for trained model",
     )
     parser.add_argument(
         "--config-output",
         default=os.path.join("ml", "models", "feature_config.json"),
-        help="Output path for feature config JSON (default: ml/models/feature_config.json)",
+        help="Output path for feature config JSON",
     )
     parser.add_argument(
         "--contamination",
@@ -177,17 +202,30 @@ def main():
     # Load data
     print("  Loading preprocessed features...")
     df = load_training_data(args.input)
-    X = df[MODEL_FEATURES].values
+
+    # Detect features
+    features = detect_features(df)
+    print(f"  Features ({len(features)}): {features}")
+
+    X = df[features].values
     print(f"  Training samples: {X.shape[0]}")
     print(f"  Feature count:    {X.shape[1]}")
+
+    # Report labels if present
+    has_labels = "label" in df.columns
+    if has_labels:
+        label_counts = df["label"].value_counts()
+        print(f"  Labels present: {dict(label_counts)}")
+        print(f"    Normal (0): {label_counts.get(0, 0)}")
+        print(f"    Attack (1): {label_counts.get(1, 0)}")
     print()
 
     # Validate data quality
     if X.shape[0] < 10:
         print("  WARNING: Very few training samples. Model quality will be limited.")
-    if np.any(np.isnan(X)):
-        print("  WARNING: NaN values found in training data. These should have been")
-        print("  handled during preprocessing. Proceeding anyway.")
+    nan_count = int(np.isnan(X).sum())
+    if nan_count > 0:
+        print(f"  WARNING: {nan_count} NaN values found in training data.")
 
     # Train model
     print("  Training Isolation Forest...")
@@ -206,20 +244,38 @@ def main():
     predictions = model.predict(X)
     scores = model.decision_function(X)
 
+    # Isolation Forest outputs: 1 = normal (inlier), -1 = anomaly (outlier)
     n_normal = int(np.sum(predictions == 1))
     n_anomaly = int(np.sum(predictions == -1))
-    print("  Training set summary:")
-    print(f"    Normal samples:    {n_normal} ({100 * n_normal / len(predictions):.1f}%)")
-    print(f"    Anomalous samples: {n_anomaly} ({100 * n_anomaly / len(predictions):.1f}%)")
+
+    print("  Training set prediction summary:")
+    print(f"    Predicted normal:    {n_normal} ({100 * n_normal / len(predictions):.1f}%)")
+    print(f"    Predicted anomalous: {n_anomaly} ({100 * n_anomaly / len(predictions):.1f}%)")
     print(f"    Anomaly score range: [{scores.min():.4f}, {scores.max():.4f}]")
     print(f"    Anomaly score mean:  {scores.mean():.4f}")
     print(f"    Anomaly score std:   {scores.std():.4f}")
-    print()
 
-    # Important disclaimer
-    print("  NOTE: These are training-set statistics on synthetic data.")
-    print("  They do NOT represent real-world detection performance.")
-    print("  Proper evaluation requires real labelled network data.")
+    # If labels exist, show agreement between predictions and labels
+    if has_labels:
+        labels = df["label"].values
+        # Convert: label 1 (attack) should map to prediction -1 (anomaly)
+        pred_anomaly = predictions == -1
+        label_anomaly = labels == 1
+
+        true_pos = int(np.sum(pred_anomaly & label_anomaly))
+        false_pos = int(np.sum(pred_anomaly & ~label_anomaly))
+        true_neg = int(np.sum(~pred_anomaly & ~label_anomaly))
+        false_neg = int(np.sum(~pred_anomaly & label_anomaly))
+
+        print()
+        print("  Training set vs. labels (informational only):")
+        print(f"    True Positives:  {true_pos} (attacks correctly flagged)")
+        print(f"    False Positives: {false_pos} (normal flagged as anomaly)")
+        print(f"    True Negatives:  {true_neg} (normal correctly passed)")
+        print(f"    False Negatives: {false_neg} (attacks missed)")
+        print()
+        print("  NOTE: These are training-set statistics, not test performance.")
+
     print()
 
     # Save model
@@ -227,22 +283,20 @@ def main():
     joblib.dump(model, args.model_output)
     print(f"  Saved model to: {args.model_output}")
 
-    # Save/update feature configuration
+    # Save feature configuration
     feature_config = {
-        "model_features": MODEL_FEATURES,
-        "feature_count": len(MODEL_FEATURES),
+        "model_features": features,
+        "feature_count": len(features),
         "model_type": "IsolationForest",
         "contamination": args.contamination,
         "n_estimators": args.n_estimators,
         "random_state": args.random_state,
         "training_samples": int(X.shape[0]),
         "training_duration_seconds": round(train_duration, 3),
+        "has_labels": has_labels,
         "model_path": args.model_output,
         "scaler_path": os.path.join("ml", "models", "scaler.joblib"),
-        "note": (
-            "Model trained on synthetic data for pipeline validation. "
-            "Not suitable for production security decisions."
-        ),
+        "data_source": "network/final_arp_dataset.csv (Person 1's captured data)",
     }
     os.makedirs(os.path.dirname(args.config_output) if os.path.dirname(args.config_output) else ".", exist_ok=True)
     with open(args.config_output, "w", encoding="utf-8") as f:

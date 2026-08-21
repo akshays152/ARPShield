@@ -10,6 +10,7 @@ This module ensures that:
 2. All numerical features are standardized (zero mean, unit variance).
 3. The fitted scaler is saved so prediction uses identical transformation.
 4. No data leakage: scaler is fit only on training data.
+5. Labels are preserved if present (for supervised evaluation).
 
 Usage:
     python ml/preprocess.py [--input PATH] [--output PATH] [--scaler-output PATH]
@@ -27,13 +28,23 @@ from sklearn.preprocessing import StandardScaler
 
 
 # Import the canonical feature list from feature engineering
-# This ensures train/predict always use the same feature set
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 try:
-    from feature_engineering import MODEL_FEATURES
+    from feature_engineering import PER_PACKET_FEATURES, WINDOWED_FEATURES
 except ImportError:
-    # Fallback if import fails (e.g., running from a different directory)
-    MODEL_FEATURES = [
+    PER_PACKET_FEATURES = [
+        "operation_encoded",
+        "is_broadcast_target",
+        "is_unspecified_target",
+        "is_unspecified_sender",
+        "macs_per_ip",
+        "sender_ip_frequency",
+        "hour",
+        "minute",
+        "second",
+        "is_reply_with_zero_target",
+    ]
+    WINDOWED_FEATURES = [
         "arp_request_count",
         "arp_reply_count",
         "reply_request_ratio",
@@ -45,6 +56,43 @@ except ImportError:
         "mac_ip_change_count",
         "unsolicited_reply_ratio",
     ]
+
+
+def detect_feature_mode(df: pd.DataFrame) -> tuple[list[str], str]:
+    """
+    Detect whether the dataset uses per-packet or windowed features.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Feature DataFrame.
+
+    Returns
+    -------
+    tuple[list[str], str]
+        (feature_list, mode_name)
+    """
+    per_packet_present = set(PER_PACKET_FEATURES) - set(df.columns)
+    windowed_present = set(WINDOWED_FEATURES) - set(df.columns)
+
+    if len(per_packet_present) == 0:
+        return PER_PACKET_FEATURES, "per-packet"
+    elif len(windowed_present) == 0:
+        return WINDOWED_FEATURES, "windowed"
+    else:
+        # Try best match
+        pp_missing = len(per_packet_present)
+        w_missing = len(windowed_present)
+        if pp_missing <= w_missing:
+            available = [f for f in PER_PACKET_FEATURES if f in df.columns]
+            print(f"  WARNING: Missing per-packet features: {per_packet_present}")
+            print(f"  Proceeding with available features: {available}")
+            return available, "per-packet (partial)"
+        else:
+            available = [f for f in WINDOWED_FEATURES if f in df.columns]
+            print(f"  WARNING: Missing windowed features: {windowed_present}")
+            print(f"  Proceeding with available features: {available}")
+            return available, "windowed (partial)"
 
 
 def load_features(filepath: str) -> pd.DataFrame:
@@ -66,17 +114,10 @@ def load_features(filepath: str) -> pd.DataFrame:
         sys.exit(1)
 
     df = pd.read_csv(filepath)
-
-    # Validate that all model features are present
-    missing_features = set(MODEL_FEATURES) - set(df.columns)
-    if missing_features:
-        print(f"ERROR: Missing features in dataset: {missing_features}")
-        sys.exit(1)
-
     return df
 
 
-def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+def handle_missing_values(df: pd.DataFrame, features: list[str]) -> pd.DataFrame:
     """
     Handle missing values in the feature dataset.
 
@@ -88,23 +129,25 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     ----------
     df : pd.DataFrame
         Feature DataFrame.
+    features : list[str]
+        List of feature columns to process.
 
     Returns
     -------
     pd.DataFrame
         DataFrame with missing values filled.
     """
-    missing_counts = df[MODEL_FEATURES].isnull().sum()
+    missing_counts = df[features].isnull().sum()
     total_missing = missing_counts.sum()
 
     if total_missing > 0:
         print(f"  Handling {total_missing} missing values (median imputation):")
-        for feat in MODEL_FEATURES:
+        for feat in features:
             n_missing = missing_counts[feat]
             if n_missing > 0:
                 median_val = df[feat].median()
                 df[feat] = df[feat].fillna(median_val)
-                print(f"    {feat}: {n_missing} missing → filled with median={median_val:.4f}")
+                print(f"    {feat}: {n_missing} missing -> filled with median={median_val:.4f}")
     else:
         print("  No missing values found.")
 
@@ -113,6 +156,7 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
 
 def scale_features(
     df: pd.DataFrame,
+    features: list[str],
     scaler: StandardScaler = None,
     fit: bool = True,
 ) -> tuple[pd.DataFrame, StandardScaler]:
@@ -123,6 +167,8 @@ def scale_features(
     ----------
     df : pd.DataFrame
         Feature DataFrame.
+    features : list[str]
+        Feature columns to scale.
     scaler : StandardScaler, optional
         Pre-fitted scaler (for prediction). If None and fit=True, a new
         scaler is created and fitted.
@@ -138,16 +184,15 @@ def scale_features(
     if scaler is None:
         scaler = StandardScaler()
 
-    feature_data = df[MODEL_FEATURES].values
+    feature_data = df[features].values
 
     if fit:
         scaled_data = scaler.fit_transform(feature_data)
     else:
         scaled_data = scaler.transform(feature_data)
 
-    # Create a new DataFrame with scaled values
     scaled_df = df.copy()
-    scaled_df[MODEL_FEATURES] = scaled_data
+    scaled_df[features] = scaled_data
 
     return scaled_df, scaler
 
@@ -189,29 +234,34 @@ def main():
     # Load features
     print("  Loading engineered features...")
     df = load_features(args.input)
-    print(f"  Loaded {len(df)} samples with {len(MODEL_FEATURES)} features")
+    print(f"  Loaded {len(df)} samples")
+    print(f"  Columns: {list(df.columns)}")
+
+    # Detect feature mode
+    features, mode = detect_feature_mode(df)
+    print(f"  Detected mode: {mode}")
+    print(f"  Model features ({len(features)}): {features}")
+
+    # Check for labels
+    has_labels = "label" in df.columns
+    if has_labels:
+        label_counts = df["label"].value_counts()
+        print(f"  Labels found: {dict(label_counts)}")
     print()
 
     # Handle missing values
     print("  Checking for missing values...")
-    df = handle_missing_values(df)
+    df = handle_missing_values(df, features)
     print()
 
     # Scale features
     print("  Scaling features (StandardScaler)...")
-    scaled_df, scaler = scale_features(df, fit=True)
+    scaled_df, scaler = scale_features(df, features, fit=True)
 
     # Print scaling parameters
     print("  Scaler parameters:")
-    for i, feat in enumerate(MODEL_FEATURES):
+    for i, feat in enumerate(features):
         print(f"    {feat:30s}  mean={scaler.mean_[i]:10.4f}  scale={scaler.scale_[i]:10.4f}")
-    print()
-
-    # Verify scaled data statistics
-    print("  Scaled feature verification (should be ~0 mean, ~1 std):")
-    for feat in MODEL_FEATURES:
-        vals = scaled_df[feat]
-        print(f"    {feat:30s}  mean={vals.mean():8.4f}  std={vals.std():8.4f}")
     print()
 
     # Save outputs
@@ -224,12 +274,14 @@ def main():
     joblib.dump(scaler, args.scaler_output)
     print(f"  Saved scaler to: {args.scaler_output}")
 
-    # Save feature configuration — critical for prediction consistency
+    # Save feature configuration
     feature_config = {
-        "model_features": MODEL_FEATURES,
-        "feature_count": len(MODEL_FEATURES),
+        "model_features": features,
+        "feature_count": len(features),
+        "feature_mode": mode,
         "scaler_type": "StandardScaler",
         "scaler_path": args.scaler_output,
+        "has_labels": has_labels,
         "note": "Feature order must be preserved during prediction.",
     }
     os.makedirs(os.path.dirname(args.feature_config_output) if os.path.dirname(args.feature_config_output) else ".", exist_ok=True)

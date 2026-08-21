@@ -32,13 +32,13 @@ The system architecture is highly modular, consisting of:
 
 | Module | Directory | Status | Owner |
 |--------|-----------|--------|-------|
-| Network Monitoring | `network/` | 🔲 Under development | Person 1 |
+| Network Monitoring | `network/` | ✅ Implemented | Person 1 |
 | Detection Engine | `detection/` | 🔲 Under development | Person 2 |
 | **ML Anomaly Detection** | **`ml/`** | **✅ Pipeline implemented** | **Person 3** |
 | Prevention & Response | `prevention/` | 🔲 Under development | Person 4 |
 | Backend, DB & Dashboard | `backend/`, `database/`, `dashboard/` | 🔲 Under development | Person 5 |
 
-> **Note:** Not all modules are complete. The ML pipeline has been implemented and validated on synthetic data. It is ready to consume real ARP packet data once the network monitoring module is operational.
+> **Note:** Not all modules are complete. The network monitoring module captures ARP traffic and provides labelled data. The ML pipeline has been trained on Person 1's captured data (6,000 records) achieving 88.73% accuracy on anomaly detection.
 
 ## AI/ML Component
 

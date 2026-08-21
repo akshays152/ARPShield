@@ -50,19 +50,16 @@ def load_model_artifacts(
     tuple
         (model, scaler, feature_config)
     """
-    # Load model
     if not os.path.isfile(model_path):
         print(f"ERROR: Model file not found: {model_path}")
         sys.exit(1)
     model = joblib.load(model_path)
 
-    # Load scaler
     if not os.path.isfile(scaler_path):
         print(f"ERROR: Scaler file not found: {scaler_path}")
         sys.exit(1)
     scaler = joblib.load(scaler_path)
 
-    # Load feature config
     if not os.path.isfile(feature_config_path):
         print(f"ERROR: Feature config not found: {feature_config_path}")
         sys.exit(1)
@@ -98,10 +95,7 @@ def predict(
     Returns
     -------
     pd.DataFrame
-        Input data augmented with prediction columns:
-        - anomaly_prediction: 1 (normal) or -1 (anomalous)
-        - anomaly_score: continuous anomaly score
-        - is_anomaly: boolean anomaly flag
+        Input data augmented with prediction columns.
     """
     model_features = feature_config["model_features"]
 
@@ -152,7 +146,6 @@ def format_output_json(result_df: pd.DataFrame, feature_config: dict) -> list[di
     records = []
     for _, row in result_df.iterrows():
         record = {
-            "window_start": float(row.get("window_start", 0)),
             "anomaly_prediction": int(row["anomaly_prediction"]),
             "anomaly_score": float(row["anomaly_score"]),
             "is_anomaly": bool(row["is_anomaly"]),
@@ -163,6 +156,12 @@ def format_output_json(result_df: pd.DataFrame, feature_config: dict) -> list[di
                 if feat in row.index
             },
         }
+        # Include label if present
+        if "label" in row.index:
+            record["true_label"] = int(row["label"])
+        # Include window_start if present
+        if "window_start" in row.index:
+            record["window_start"] = float(row["window_start"])
         records.append(record)
     return records
 
@@ -179,27 +178,27 @@ def main():
     parser.add_argument(
         "--model",
         default=os.path.join("ml", "models", "isolation_forest.joblib"),
-        help="Path to trained model (default: ml/models/isolation_forest.joblib)",
+        help="Path to trained model",
     )
     parser.add_argument(
         "--scaler",
         default=os.path.join("ml", "models", "scaler.joblib"),
-        help="Path to fitted scaler (default: ml/models/scaler.joblib)",
+        help="Path to fitted scaler",
     )
     parser.add_argument(
         "--feature-config",
         default=os.path.join("ml", "models", "feature_config.json"),
-        help="Path to feature config JSON (default: ml/models/feature_config.json)",
+        help="Path to feature config JSON",
     )
     parser.add_argument(
         "--output",
         default=os.path.join("ml", "data", "processed", "predictions.csv"),
-        help="Output path for predictions CSV (default: ml/data/processed/predictions.csv)",
+        help="Output path for predictions CSV",
     )
     parser.add_argument(
         "--json-output",
         default=os.path.join("ml", "data", "processed", "predictions.json"),
-        help="Output path for predictions JSON (default: ml/data/processed/predictions.json)",
+        help="Output path for predictions JSON",
     )
     args = parser.parse_args()
 
@@ -219,12 +218,17 @@ def main():
     )
     print(f"  Model type:     {feature_config.get('model_type', 'Unknown')}")
     print(f"  Feature count:  {feature_config.get('feature_count', 'Unknown')}")
+    print(f"  Features:       {feature_config.get('model_features', [])}")
     print()
 
     # Load input data
     print("  Loading input features...")
     input_df = pd.read_csv(args.input)
     print(f"  Input samples:  {len(input_df)}")
+
+    has_labels = "label" in input_df.columns
+    if has_labels:
+        print(f"  Labels present: {dict(input_df['label'].value_counts())}")
     print()
 
     # Generate predictions
@@ -241,19 +245,20 @@ def main():
     print(f"    Total samples:      {len(result_df)}")
     print(f"    Normal:             {n_normal} ({100 * n_normal / len(result_df):.1f}%)")
     print(f"    Anomalous:          {n_anomaly} ({100 * n_anomaly / len(result_df):.1f}%)")
-    print(f"    Score range:        [{result_df['anomaly_score'].min():.4f}, {result_df['anomaly_score'].max():.4f}]")
-    print()
+    print(f"    Score range:        [{result_df['anomaly_score'].min():.4f}, "
+          f"{result_df['anomaly_score'].max():.4f}]")
 
-    # Show anomalous samples
-    if n_anomaly > 0:
-        print("  Anomalous windows detected:")
-        anomalies = result_df[result_df["is_anomaly"]]
-        for _, row in anomalies.head(10).iterrows():
-            ws = row.get("window_start", "N/A")
-            score = row["anomaly_score"]
-            print(f"    window_start={ws}  score={score:.4f}")
-        if n_anomaly > 10:
-            print(f"    ... and {n_anomaly - 10} more")
+    # If labels present, show agreement
+    if has_labels:
+        pred_anomaly = result_df["anomaly_prediction"] == -1
+        label_anomaly = result_df["label"] == 1
+        tp = int((pred_anomaly & label_anomaly).sum())
+        fp = int((pred_anomaly & ~label_anomaly).sum())
+        tn = int((~pred_anomaly & ~label_anomaly).sum())
+        fn = int((~pred_anomaly & label_anomaly).sum())
+        print()
+        print("  Prediction vs. labels:")
+        print(f"    TP={tp}  FP={fp}  TN={tn}  FN={fn}")
     print()
 
     # Save CSV output
