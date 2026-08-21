@@ -164,3 +164,9 @@ cython_debug/
 
 # Mac OS
 .DS_Store
+
+# ARPShield ML — Generated artifacts (reproducible via pipeline scripts)
+ml/models/*.joblib
+ml/models/*.json
+ml/data/sample_arp_data.csv
+ml/data/processed/
