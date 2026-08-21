@@ -4,196 +4,89 @@
 
 This module provides the **AI/ML component** of ARPShield — an AI-driven ARP spoofing detection and prevention system. It processes ARP network traffic data into structured features and uses an **Isolation Forest** model to detect anomalous network behaviour that may indicate ARP spoofing or other Layer 2 attacks.
 
-The module is designed to:
-- Consume raw ARP packet observations from the network monitoring module (`network/`)
-- Engineer meaningful per-packet features from captured traffic
-- Train an unsupervised anomaly detection model
-- Produce anomaly predictions and scores for downstream risk assessment
-- Evaluate detection quality when labelled data is available
-
 ## 2. Input Data
 
 ### Data Source
 
-The ML pipeline consumes data produced by **Person 1's network monitoring module** (`network/`). Person 1 has provided:
+The ML pipeline consumes data produced by **Person 1's network monitoring module** (`network/`). 
 
 - **`network/arp_dataset.csv`** — 5,000 real captured ARP packets
 - **`network/simulated_attack.csv`** — 1,000 simulated ARP spoofing packets
 - **`network/final_arp_dataset.csv`** — 6,000 combined records with labels (0=normal, 1=attack)
 
-### Data Format (Person 1's schema)
+## 3. Methodological Audit & Corrections
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `timestamp` | string | Capture time (ISO format, e.g. `2026-08-20 14:52:06`) |
-| `sender_ip` | string | Source/sender IP address |
-| `sender_mac` | string | Source/sender MAC address |
-| `target_ip` | string | Target IP address |
-| `target_mac` | string | Target MAC address |
-| `operation` | string | ARP operation: `"request"` or `"reply"` |
-| `label` | int | 0 = normal traffic, 1 = simulated attack (in `final_arp_dataset.csv`) |
+During development, a strict audit of the experimental methodology revealed severe data leakage and dataset artifacts. The pipeline was subsequently corrected to ensure valid evaluation.
 
-## 3. Feature Engineering
+### Leakage & Artifacts Found
 
-Raw per-packet ARP observations are converted into 10 engineered features. The module supports two modes:
+| Feature | Audit Finding | Resolution |
+|---------|---------------|------------|
+| `macs_per_ip`, `sender_ip_frequency` | **Data Leakage**: Originally computed across the entire dataset via `groupby`, leaking future/test information into training. | **Fixed**: Engineered using a stateful class (`FeatureEngineer`) that learns frequency/MAC maps exclusively from the training set and applies them to the test set. |
+| `is_reply_with_zero_target` | **Severe Artifact**: 90.1% of simulated attacks have a target MAC of `00:00:00:00:00:00` combined with operation `reply`. Real ARP replies always have a valid target MAC. This is a shortcut created by the attack generation script. | Kept for now to detect the simulated attacks, but heavily documented as a dataset-specific artifact. Ablation shows removing it drops F1 by ~0.20. |
+| `operation_encoded` | **Artifact**: 100% of attacks in this dataset are replies. | Kept, as ARP attacks do rely on unsolicited replies, though real attacks may also contain requests. |
+| `hour`, `minute`, `is_unspecified_target` | **Zero Variance**: All 6,000 packets were captured within the same 24-second window (Hour 14, Minute 52). | **Removed** from the feature set. |
 
-### Per-Packet Features (Primary — aligns with Person 1's approach)
+### Evaluation Methodology
 
-| Feature | Description | Anomaly Relevance |
-|---------|-------------|-------------------|
-| `operation_encoded` | ARP op as integer: 0=request, 1=reply | Attacks use reply packets |
-| `is_broadcast_target` | Target MAC is broadcast (ff:ff:ff:ff:ff:ff) | Suspicious for unsolicited replies |
-| `is_unspecified_target` | Target IP is 0.0.0.0 | ARP probes; unusual in normal traffic |
-| `is_unspecified_sender` | Sender IP is 0.0.0.0 | DHCP probes; unusual otherwise |
-| `macs_per_ip` | Unique MACs per sender IP (dataset-wide) | **Primary spoofing signal**: >1 means multiple MACs claim same IP |
-| `sender_ip_frequency` | How often this sender IP appears | Flooding/scanning indicator |
-| `hour` | Hour of day from timestamp | Temporal attack patterns |
-| `minute` | Minute from timestamp | Temporal attack patterns |
-| `second` | Second from timestamp | Temporal attack patterns |
-| `is_reply_with_zero_target` | Reply with zero target MAC | Suspicious: legitimate replies have valid target MAC |
+Because all 6,000 packets were captured in a single 24-second window, a time-based train/test split is meaningless (it would arbitrarily cut the dataset mid-second with no genuine temporal separation).
 
-### Windowed Features (Complementary mode)
+Instead, the methodology uses a **Stratified Random Split (80% Train, 20% Test)**.
+1. The dataset is split *before* any feature engineering.
+2. `FeatureEngineer` and `StandardScaler` are fitted **only** on the training set.
+3. The model is trained **only** on the training set.
+4. Evaluation is performed **only** on the unseen test set.
 
-Available via `--mode windowed`. Aggregates packets into time windows for temporal pattern detection. Features include request/reply counts, reply ratio, unique entities, IP-MAC mapping instability, and unsolicited reply estimation.
+## 4. Evaluation Results (Test Set)
 
-## 4. Why Isolation Forest?
-
-Isolation Forest was selected as the anomaly detection model for:
-
-1. **Anomaly-optimised**: Explicitly designed for anomaly detection by isolating outliers via random partitioning (shorter isolation path = more anomalous).
-2. **Works without labels**: Can be trained unsupervised, important for real deployments where attack labels don't exist.
-3. **Computationally efficient**: O(n·log n) training; handles the 10-feature space effectively.
-4. **Interpretable scores**: `decision_function` produces continuous anomaly scores enabling configurable risk thresholds.
-5. **Low false-positive rate**: 6.78% FPR achieved on Person 1's dataset.
-6. **Proven in network security**: Widely used in intrusion detection research.
-
-## 5. Training Process
-
-```bash
-# Step 1: Engineer features from Person 1's captured data
-python ml/feature_engineering.py --input network/final_arp_dataset.csv
-
-# Step 2: Preprocess (handle missing values + scale)
-python ml/preprocess.py
-
-# Step 3: Train model (contamination matches attack ratio in dataset)
-python ml/train.py --contamination 0.167
-
-# Step 4: Predict
-python ml/predict.py
-
-# Step 5: Evaluate
-python ml/evaluate.py
-```
-
-### Configurable Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--contamination` | 0.05 | Expected proportion of anomalies (0 < c ≤ 0.5). Set to 0.167 for Person 1's data |
-| `--n-estimators` | 100 | Number of isolation trees in the ensemble |
-| `--random-state` | 42 | Random seed for reproducibility |
-| `--mode` | per-packet | Feature mode: `per-packet` or `windowed` |
-
-### Training Artifacts
-
-Saved to `ml/models/`:
-- `isolation_forest.joblib` — Trained model
-- `scaler.joblib` — Fitted StandardScaler
-- `feature_config.json` — Feature list, model parameters, metadata
-
-## 6. Prediction Output
-
-```bash
-python ml/predict.py --input ml/data/processed/features.csv
-```
-
-For each packet, the prediction module outputs:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `anomaly_prediction` | int | 1 = normal, -1 = anomalous |
-| `anomaly_score` | float | Continuous score (more negative = more anomalous) |
-| `is_anomaly` | bool | True if prediction is -1 |
-
-Output is saved as both **CSV** and **structured JSON** for backend/risk engine consumption.
-
-## 7. Evaluation Results
-
-### Supervised Evaluation (Person 1's labelled data: 5,000 normal + 1,000 attack)
+The following metrics are derived strictly from the **20% held-out test set** (1,200 packets: 1,000 normal, 200 attack).
 
 | Metric | Value |
 |--------|-------|
-| **Accuracy** | 88.73% |
-| **Precision** | 66.17% |
-| **Recall** | 66.30% |
-| **F1-score** | 66.23% |
-| **False Positive Rate** | 6.78% |
+| **Accuracy** | 90.25% |
+| **Precision** | 70.24% |
+| **Recall** | 72.00% |
+| **F1-score** | 71.11% |
+| **False Positive Rate** | 6.10% |
 
-### Confusion Matrix
+### Confusion Matrix (Test Set)
 
 |  | Predicted Normal | Predicted Anomaly |
 |--|-----------------|-------------------|
-| **True Normal** | 4,661 (TN) | 339 (FP) |
-| **True Attack** | 337 (FN) | 663 (TP) |
+| **True Normal** | 939 (TN) | 61 (FP) |
+| **True Attack** | 56 (FN) | 144 (TP) |
 
-### Interpretation
+### Feature Ablation Analysis
 
-- The model achieves **88.73% overall accuracy** with a low **6.78% false positive rate**
-- It correctly identifies **66.3% of attacks** (recall) while maintaining high precision
-- Normal traffic classification is strong at **93% precision/recall**
-- The Isolation Forest works well as a first-line anomaly detector, with room for improvement via ensemble methods or supervised classifiers
+Removing features one at a time reveals what the model relies on:
 
-## 8. Limitations
+| Omitted Feature | Test F1-Score | Impact |
+|-----------------|---------------|--------|
+| *(Baseline: All Features)* | 0.7111 | - |
+| `is_broadcast_target` | 0.8136 | **+0.1024** (Feature adds noise) |
+| `is_unspecified_sender`| 0.7990 | **+0.0879** (Feature adds noise) |
+| `operation_encoded` | 0.7232 | +0.0121 |
+| `second` | 0.6684 | -0.0428 |
+| `macs_per_ip` | 0.5590 | **-0.1521** (Critical real feature) |
+| `is_reply_with_zero_target`| 0.5087 | **-0.2024** (Critical artificial shortcut) |
+| `sender_ip_frequency` | 0.4764 | **-0.2347** (Critical feature) |
 
-1. **Unsupervised model on labelled data**: Isolation Forest doesn't use labels during training — a supervised model (e.g., Random Forest) could potentially achieve higher recall on this specific dataset.
-2. **Simulated attack data**: The attack portion of the dataset is simulated (not from real attacks), so real-world performance may differ.
-3. **Low temporal variance**: All packets were captured within the same minute, so time-based features (`hour`, `minute`) provide no discriminative power in this dataset.
-4. **No gateway awareness**: The model doesn't know the network's gateway IP, limiting its ability to specifically flag gateway spoofing.
-5. **Training on full dataset**: For rigorous evaluation, a train/test split should be used. Current results are on the training set.
-6. **No online learning**: The model must be retrained to adapt to network changes.
+## 5. Usage
 
-## 9. Backend Integration
+To run the strict evaluation pipeline:
 
-The prediction module outputs structured JSON designed for consumption by the backend/risk engine:
-
-```python
-# Example: importing prediction module programmatically
-from ml.predict import load_model_artifacts, predict
-
-model, scaler, config = load_model_artifacts(
-    "ml/models/isolation_forest.joblib",
-    "ml/models/scaler.joblib",
-    "ml/models/feature_config.json",
-)
-
-# feature_df is a DataFrame with the 10 model features
-result = predict(model, scaler, config, feature_df)
-# result contains: anomaly_prediction, anomaly_score, is_anomaly
+```bash
+python ml/split_and_evaluate.py
 ```
 
-## Directory Structure
+To engineer features on a dataset (without splitting):
 
+```bash
+python ml/feature_engineering.py --input <path> --output <path>
 ```
-ml/
-├── README.md                  # This documentation
-├── generate_sample_data.py    # Synthetic data generator (for when real data unavailable)
-├── feature_engineering.py     # Raw ARP → per-packet/windowed ML features
-├── preprocess.py              # Missing value handling + scaling
-├── train.py                   # Isolation Forest training
-├── predict.py                 # Anomaly prediction
-├── evaluate.py                # Model evaluation (unsupervised/supervised)
-├── models/                    # Trained model artifacts
-│   ├── isolation_forest.joblib
-│   ├── scaler.joblib
-│   └── feature_config.json
-└── data/
-    └── processed/
-        ├── features.csv
-        ├── features_scaled.csv
-        ├── predictions.csv
-        ├── predictions.json
-        ├── evaluation_metrics.json
-        ├── confusion_matrix.png
-        └── score_distribution_by_label.png
-```
+
+## 6. Conclusions & Limitations
+
+1. **Dataset Suitability**: The current dataset is highly artificial. The 1,000 attacks were generated by randomly mutating normal packets, leaving obvious artifacts (like zeroed target MACs in replies) that the model quickly learns. It is useful for testing the *pipeline*, but not for training a production-ready model.
+2. **Temporal Features**: Because the entire dataset spans only 24 seconds, we cannot learn meaningful temporal profiles (e.g., normal activity by hour).
+3. **Model Performance**: On the strict test set, the Isolation Forest achieves a **71.1% F1-score** with a 6.1% False Positive Rate. This is solid performance for an unsupervised model operating on tabular features, but could likely be improved by using a supervised algorithm (like Random Forest) if we assume labeled data will always be available.
