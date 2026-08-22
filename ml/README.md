@@ -2,91 +2,175 @@
 
 ## 1. Purpose
 
-This module provides the **AI/ML component** of ARPShield — an AI-driven ARP spoofing detection and prevention system. It processes ARP network traffic data into structured features and uses an **Isolation Forest** model to detect anomalous network behaviour that may indicate ARP spoofing or other Layer 2 attacks.
+This module provides the **AI/ML component** of ARPShield — an AI-driven ARP spoofing detection and prevention system. It processes ARP network traffic data into structured features and uses an **Isolation Forest** model to detect anomalous network behaviour indicative of ARP spoofing.
 
-## 2. Input Data
+The initial dataset contained simulation artifacts and was therefore treated as a **baseline engineering experiment** rather than final model validation. The pipeline is ready for Person 1's improved v2 dataset.
 
-### Data Source
+## 2. Architecture
 
-The ML pipeline consumes data produced by **Person 1's network monitoring module** (`network/`). 
-
-- **`network/arp_dataset.csv`** — 5,000 real captured ARP packets
-- **`network/simulated_attack.csv`** — 1,000 simulated ARP spoofing packets
-- **`network/final_arp_dataset.csv`** — 6,000 combined records with labels (0=normal, 1=attack)
-
-## 3. Methodological Audit & Corrections
-
-During development, a strict audit of the experimental methodology revealed severe data leakage and dataset artifacts. The pipeline was subsequently corrected to ensure valid evaluation.
-
-### Leakage & Artifacts Found
-
-| Feature | Audit Finding | Resolution |
-|---------|---------------|------------|
-| `macs_per_ip`, `sender_ip_frequency` | **Data Leakage**: Originally computed across the entire dataset via `groupby`, leaking future/test information into training. | **Fixed**: Engineered using a stateful class (`FeatureEngineer`) that learns frequency/MAC maps exclusively from the training set and applies them to the test set. |
-| `is_reply_with_zero_target` | **Severe Artifact**: 90.1% of simulated attacks have a target MAC of `00:00:00:00:00:00` combined with operation `reply`. Real ARP replies always have a valid target MAC. This is a shortcut created by the attack generation script. | Kept for now to detect the simulated attacks, but heavily documented as a dataset-specific artifact. Ablation shows removing it drops F1 by ~0.20. |
-| `operation_encoded` | **Artifact**: 100% of attacks in this dataset are replies. | Kept, as ARP attacks do rely on unsolicited replies, though real attacks may also contain requests. |
-| `hour`, `minute`, `is_unspecified_target` | **Zero Variance**: All 6,000 packets were captured within the same 24-second window (Hour 14, Minute 52). | **Removed** from the feature set. |
-
-### Evaluation Methodology
-
-Because all 6,000 packets were captured in a single 24-second window, a time-based train/test split is meaningless (it would arbitrarily cut the dataset mid-second with no genuine temporal separation).
-
-Instead, the methodology uses a **Stratified Random Split (80% Train, 20% Test)**.
-1. The dataset is split *before* any feature engineering.
-2. `FeatureEngineer` and `StandardScaler` are fitted **only** on the training set.
-3. The model is trained **only** on the training set.
-4. Evaluation is performed **only** on the unseen test set.
-
-## 4. Evaluation Results (Test Set)
-
-The following metrics are derived strictly from the **20% held-out test set** (1,200 packets: 1,000 normal, 200 attack).
-
-| Metric | Value |
-|--------|-------|
-| **Accuracy** | 90.25% |
-| **Precision** | 70.24% |
-| **Recall** | 72.00% |
-| **F1-score** | 71.11% |
-| **False Positive Rate** | 6.10% |
-
-### Confusion Matrix (Test Set)
-
-|  | Predicted Normal | Predicted Anomaly |
-|--|-----------------|-------------------|
-| **True Normal** | 939 (TN) | 61 (FP) |
-| **True Attack** | 56 (FN) | 144 (TP) |
-
-### Feature Ablation Analysis
-
-Removing features one at a time reveals what the model relies on:
-
-| Omitted Feature | Test F1-Score | Impact |
-|-----------------|---------------|--------|
-| *(Baseline: All Features)* | 0.7111 | - |
-| `is_broadcast_target` | 0.8136 | **+0.1024** (Feature adds noise) |
-| `is_unspecified_sender`| 0.7990 | **+0.0879** (Feature adds noise) |
-| `operation_encoded` | 0.7232 | +0.0121 |
-| `second` | 0.6684 | -0.0428 |
-| `macs_per_ip` | 0.5590 | **-0.1521** (Critical real feature) |
-| `is_reply_with_zero_target`| 0.5087 | **-0.2024** (Critical artificial shortcut) |
-| `sender_ip_frequency` | 0.4764 | **-0.2347** (Critical feature) |
-
-## 5. Usage
-
-To run the strict evaluation pipeline:
-
-```bash
-python ml/split_and_evaluate.py
+```
+RAW ARP DATA (network/final_arp_dataset.csv)
+   ↓
+TRAIN / TEST SPLIT (stratified, before feature engineering)
+   ↓
+FEATURE ENGINEERING — fit on train only (FeatureEngineer)
+   ↓
+TRANSFORM TRAIN → TRANSFORM TEST
+   ↓
+PREPROCESSING — fit scaler on train only (StandardScaler)
+   ↓
+TRANSFORM TRAIN → TRANSFORM TEST
+   ↓
+TRAIN Isolation Forest (unsupervised — labels not used)
+   ↓
+EVALUATE ON UNSEEN TEST SET
 ```
 
-To engineer features on a dataset (without splitting):
+## 3. Input Data
 
-```bash
-python ml/feature_engineering.py --input <path> --output <path>
+### Expected Raw Schema
+
+| Column | Type | Required |
+|--------|------|----------|
+| `timestamp` | string (ISO datetime) | ✅ |
+| `sender_ip` | string | ✅ |
+| `sender_mac` | string | ✅ |
+| `target_ip` | string | ✅ |
+| `target_mac` | string | ✅ |
+| `operation` | string ("request" / "reply") | ✅ |
+| `label` | int (0=normal, 1=attack) | Optional (for evaluation) |
+
+If v2 changes this schema, the pipeline will fail with a clear error listing the missing columns.
+
+## 4. Feature Engineering
+
+All feature selection is controlled via `ENABLED_FEATURES` in `feature_engineering.py`.
+
+### Currently Enabled Features
+
+| Feature | Category | Stateful | Status |
+|---------|----------|----------|--------|
+| `operation_encoded` | ARP behaviour | No | Enabled |
+| `macs_per_ip` | IP-MAC mapping | **Yes** (fit on train) | Enabled (strong candidate) |
+| `sender_ip_frequency` | Frequency | **Yes** (fit on train) | Enabled (strong candidate) |
+| `is_broadcast_target` | Packet format | No | Candidate removal |
+| `is_unspecified_sender` | Packet format | No | Candidate removal |
+| `second` | Timing | No | Candidate removal |
+| `is_reply_with_zero_target` | Packet format | No | Candidate removal (artifact) |
+
+### Disabled Features (zero variance in v1 data)
+
+- `hour` — all packets captured at hour 14
+- `minute` — all packets captured at minute 52
+- `is_unspecified_target` — all zeros
+
+### Features Marked for Removal / Re-evaluation
+
+- **`is_reply_with_zero_target`**: Simulation artifact. 90.1% of v1 attacks have this flag. Real ARP replies always have valid target MACs.
+- **`is_broadcast_target`**: Ablation showed removing it improved F1 (+0.10).
+- **`is_unspecified_sender`**: Ablation showed removing it improved F1 (+0.09).
+- **`second`**: Only 25 unique values in 24-second capture.
+- **`hour`, `minute`**: Zero variance.
+
+Feature selection will be finalised after Person 1's v2 dataset is available.
+
+## 5. Data Leakage Prevention
+
+| Risk | Mitigation |
+|------|------------|
+| Dataset-wide statistics before split | `macs_per_ip` and `sender_ip_frequency` use a stateful `FeatureEngineer` class with explicit `fit()`/`transform()` |
+| Scaler fit on full data | `StandardScaler` is fit on training data only |
+| Test labels used in training | Assertions verify `label` is never in the feature list |
+| Train/test overlap | Assertion verifies no index overlap after split |
+| Features depending on test data | `FeatureEngineer.transform()` asserts `is_fitted` before use |
+
+## 6. Isolation Forest
+
+Isolation Forest is an **unsupervised** anomaly detection algorithm. It does not use labels during training. Key properties:
+
+- Isolates anomalies via random recursive partitioning
+- Shorter average path length = more anomalous
+- `contamination` parameter sets expected anomaly proportion
+- `decision_function()` returns continuous anomaly scores
+- Labels are used ONLY for post-hoc evaluation
+
+## 7. Prediction Format
+
+```json
+{
+    "prediction": "anomaly",
+    "anomaly_score": -0.0523,
+    "is_anomaly": true,
+    "model_type": "IsolationForest"
+}
 ```
 
-## 6. Conclusions & Limitations
+The prediction module (`predict.py`) loads the exact trained model, scaler, and metadata, enforces the exact feature order from training, and rejects missing features with clear errors.
 
-1. **Dataset Suitability**: The current dataset is highly artificial. The 1,000 attacks were generated by randomly mutating normal packets, leaving obvious artifacts (like zeroed target MACs in replies) that the model quickly learns. It is useful for testing the *pipeline*, but not for training a production-ready model.
-2. **Temporal Features**: Because the entire dataset spans only 24 seconds, we cannot learn meaningful temporal profiles (e.g., normal activity by hour).
-3. **Model Performance**: On the strict test set, the Isolation Forest achieves a **71.1% F1-score** with a 6.1% False Positive Rate. This is solid performance for an unsupervised model operating on tabular features, but could likely be improved by using a supervised algorithm (like Random Forest) if we assume labeled data will always be available.
+## 8. Evaluation
+
+The evaluation pipeline (`split_and_evaluate.py`) clearly separates:
+
+- **Training metrics** — informational only, NOT generalisation performance
+- **Test metrics** — computed on the held-out, unseen test set
+
+Supported metrics: Accuracy, Precision, Recall, F1-score, False Positive Rate, Confusion Matrix.
+
+## 9. Feature Ablation Framework
+
+The ablation framework in `split_and_evaluate.py` supports predefined experiments:
+
+| Experiment | Description |
+|-----------|-------------|
+| `baseline` | All enabled features |
+| `drop_macs_per_ip` | Remove macs_per_ip |
+| `drop_timing` | Remove timing features |
+| `drop_suspicious_format` | Remove is_reply_with_zero_target, is_broadcast_target, is_unspecified_sender |
+| `core_arp_only` | Only operation_encoded, macs_per_ip, sender_ip_frequency |
+| `drop_<feature>` | Auto-generated single-feature drop experiments |
+
+Run with: `python ml/split_and_evaluate.py --ablation`
+
+## 10. Training Reproducibility
+
+All model artifacts are saved to `ml/models/`:
+
+| File | Contents |
+|------|----------|
+| `isolation_forest.joblib` | Trained model |
+| `scaler.joblib` | Fitted StandardScaler |
+| `feature_engineer.joblib` | Fitted FeatureEngineer (with learned mappings) |
+| `model_metadata.json` | Features, parameters, training info |
+
+## 11. Known Limitations
+
+1. The v1 dataset is a **baseline experiment**, not final validation. The 1,000 simulated attacks contain obvious artifacts.
+2. The entire v1 dataset spans only 24 seconds — no meaningful temporal patterns.
+3. `is_reply_with_zero_target` is a simulation artifact, not a real ARP property.
+4. Current results from v1 data should not be cited as production performance.
+5. The pipeline does not support online/incremental learning.
+
+## 12. What Happens When V2 Dataset Arrives
+
+1. Run `split_and_evaluate.py --input <v2_path> --ablation` to re-evaluate.
+2. If the schema changes, the pipeline will fail clearly and tell you which columns are missing.
+3. Re-evaluate all candidate-removal features with real attack data.
+4. Potentially enable `hour`/`minute` if the capture spans multiple hours.
+5. Consider removing `is_reply_with_zero_target` if v2 attacks are realistic.
+6. Tune `contamination` parameter to match v2's attack proportion.
+
+## Directory Structure
+
+```
+ml/
+├── README.md                  # This documentation
+├── feature_engineering.py     # Feature registry, FeatureEngineer class
+├── preprocess.py              # Missing values, scaling
+├── train.py                   # Isolation Forest training
+├── predict.py                 # Model loading and prediction
+├── evaluate.py                # Supervised/unsupervised evaluation
+├── split_and_evaluate.py      # Full leakage-free pipeline + ablation
+├── generate_sample_data.py    # Synthetic data (pipeline testing only)
+├── models/                    # Trained artifacts (git-ignored)
+└── data/                      # Processed data (git-ignored)
+```

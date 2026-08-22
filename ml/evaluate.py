@@ -1,25 +1,30 @@
 """
 ARPShield — Evaluation Module
 ================================
-Evaluates the trained anomaly detection model.
+Evaluates the trained anomaly detection model's predictions.
 
-Since Person 1 has provided labelled data (0=normal, 1=attack), this
-module can now run proper SUPERVISED evaluation with:
-    - Precision, Recall, F1-score
-    - Confusion matrix (TP, FP, TN, FN)
-    - False positive rate (FPR)
-    - Score distribution analysis
+IMPORTANT DISTINCTION:
+    Isolation Forest is an UNSUPERVISED model — it does not use labels
+    during training. Labels (if available) are used ONLY for post-hoc
+    evaluation of how well the model's anomaly predictions align with
+    known ground truth.
 
-The module auto-detects whether labels are present and selects the
-appropriate evaluation mode.
+This module supports two modes:
+    1. SUPERVISED evaluation (labels available):
+       Computes Accuracy, Precision, Recall, F1-score, FPR,
+       Confusion Matrix, and score distributions by true label.
 
-Note on label mapping:
-    - Person 1's labels:     0 = normal,  1 = attack
-    - Isolation Forest:      1 = inlier, -1 = outlier/anomaly
-    - For evaluation we map: label 1 (attack) <-> prediction -1 (anomaly)
+    2. UNSUPERVISED evaluation (no labels):
+       Computes score distribution statistics and prediction counts.
+
+Label mapping:
+    Person 1's labels:     0 = normal,  1 = attack
+    Isolation Forest:      1 = inlier, -1 = outlier/anomaly
+    For evaluation:        label==1 <-> prediction==-1
 
 Usage:
     python ml/evaluate.py [--predictions PATH] [--output-dir PATH]
+                          [--dataset-name NAME]
 """
 
 import argparse
@@ -32,7 +37,7 @@ import pandas as pd
 
 try:
     import matplotlib
-    matplotlib.use("Agg")  # Non-interactive backend for saving plots
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     HAS_MATPLOTLIB = True
 except ImportError:
@@ -40,23 +45,7 @@ except ImportError:
 
 
 def evaluate_unsupervised(df: pd.DataFrame, output_dir: str) -> dict:
-    """
-    Evaluate model output without ground-truth labels.
-
-    Produces distribution analysis and diagnostic statistics.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Prediction results with 'anomaly_score', 'anomaly_prediction'.
-    output_dir : str
-        Directory to save evaluation outputs.
-
-    Returns
-    -------
-    dict
-        Evaluation metrics and diagnostics.
-    """
+    """Evaluate without ground-truth labels."""
     scores = df["anomaly_score"].values
     predictions = df["anomaly_prediction"].values
 
@@ -76,62 +65,32 @@ def evaluate_unsupervised(df: pd.DataFrame, output_dir: str) -> dict:
             "min": round(float(np.min(scores)), 6),
             "max": round(float(np.max(scores)), 6),
             "median": round(float(np.median(scores)), 6),
-            "q25": round(float(np.percentile(scores, 25)), 6),
-            "q75": round(float(np.percentile(scores, 75)), 6),
         },
         "note": (
-            "Unsupervised evaluation — no ground-truth labels available. "
-            "These statistics describe model behaviour, not detection accuracy."
+            "Unsupervised evaluation — no ground-truth labels. "
+            "These statistics describe model behaviour, not accuracy."
         ),
     }
-
-    if n_anomaly > 0:
-        normal_scores = scores[predictions == 1]
-        anomaly_scores = scores[predictions == -1]
-        metrics["normal_score_stats"] = {
-            "mean": round(float(np.mean(normal_scores)), 6),
-            "std": round(float(np.std(normal_scores)), 6),
-        }
-        metrics["anomaly_score_stats"] = {
-            "mean": round(float(np.mean(anomaly_scores)), 6),
-            "std": round(float(np.std(anomaly_scores)), 6),
-        }
-
-    if HAS_MATPLOTLIB:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.hist(scores[predictions == 1], bins=30, alpha=0.7,
-                label="Normal", color="#2196F3")
-        if n_anomaly > 0:
-            ax.hist(scores[predictions == -1], bins=30, alpha=0.7,
-                    label="Anomalous", color="#F44336")
-        ax.set_xlabel("Anomaly Score (decision_function)")
-        ax.set_ylabel("Count")
-        ax.set_title("ARPShield — Anomaly Score Distribution")
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        plot_path = os.path.join(output_dir, "score_distribution.png")
-        fig.savefig(plot_path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        metrics["score_distribution_plot"] = plot_path
 
     return metrics
 
 
-def evaluate_supervised(df: pd.DataFrame, output_dir: str) -> dict:
+def evaluate_supervised(
+    df: pd.DataFrame,
+    output_dir: str,
+    dataset_name: str = "Test",
+) -> dict:
     """
-    Evaluate model output using ground-truth labels from Person 1's data.
-
-    Label mapping:
-        Person 1: 0=normal, 1=attack
-        IF model: 1=normal, -1=anomaly
-        For sklearn: 1=positive (anomaly/attack), 0=negative (normal)
+    Evaluate with ground-truth labels.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Prediction results with 'anomaly_prediction' and 'label' columns.
+        Must contain 'anomaly_prediction', 'anomaly_score', 'label'.
     output_dir : str
-        Directory to save evaluation outputs.
+        Directory for output files.
+    dataset_name : str
+        Name to use in output (e.g. "Train", "Test").
 
     Returns
     -------
@@ -146,10 +105,9 @@ def evaluate_supervised(df: pd.DataFrame, output_dir: str) -> dict:
         recall_score,
     )
 
-    # Map to binary: 1 = anomaly/attack (positive class), 0 = normal
-    y_true = (df["label"] == 1).astype(int).values       # Person 1: 1=attack
-    y_pred = (df["anomaly_prediction"] == -1).astype(int).values  # IF: -1=anomaly
-
+    # Map: label==1 (attack) <-> prediction==-1 (anomaly)
+    y_true = (df["label"] == 1).astype(int).values
+    y_pred = (df["anomaly_prediction"] == -1).astype(int).values
     scores = df["anomaly_score"].values
 
     cm = confusion_matrix(y_true, y_pred)
@@ -163,6 +121,7 @@ def evaluate_supervised(df: pd.DataFrame, output_dir: str) -> dict:
 
     metrics = {
         "evaluation_mode": "supervised",
+        "dataset_name": dataset_name,
         "total_samples": len(df),
         "label_distribution": {
             "normal": int((y_true == 0).sum()),
@@ -184,82 +143,80 @@ def evaluate_supervised(df: pd.DataFrame, output_dir: str) -> dict:
             target_names=["Normal", "Attack/Anomaly"],
             zero_division=0,
         ),
+        "note": (
+            "Isolation Forest is UNSUPERVISED. Labels were NOT used during "
+            "training. This evaluation measures how well the model's "
+            "unsupervised anomaly judgments align with known labels."
+        ),
     }
 
     # Score distributions by true label
     normal_scores = scores[y_true == 0]
     attack_scores = scores[y_true == 1]
-    metrics["score_by_true_label"] = {
-        "normal": {
-            "mean": round(float(np.mean(normal_scores)), 6),
-            "std": round(float(np.std(normal_scores)), 6),
-            "min": round(float(np.min(normal_scores)), 6),
-            "max": round(float(np.max(normal_scores)), 6),
-        },
-        "attack": {
-            "mean": round(float(np.mean(attack_scores)), 6),
-            "std": round(float(np.std(attack_scores)), 6),
-            "min": round(float(np.min(attack_scores)), 6),
-            "max": round(float(np.max(attack_scores)), 6),
-        },
-    }
+    if len(normal_scores) > 0 and len(attack_scores) > 0:
+        metrics["score_by_true_label"] = {
+            "normal_mean": round(float(np.mean(normal_scores)), 6),
+            "attack_mean": round(float(np.mean(attack_scores)), 6),
+        }
 
-    if HAS_MATPLOTLIB:
-        # Confusion matrix heatmap
-        fig, ax = plt.subplots(figsize=(8, 6))
+    # Plots
+    if HAS_MATPLOTLIB and output_dir:
+        # Confusion matrix
+        fig, ax = plt.subplots(figsize=(7, 5))
         im = ax.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
-        ax.set_title("ARPShield — Confusion Matrix")
-        ax.set_xlabel("Predicted Label")
-        ax.set_ylabel("True Label")
+        ax.set_title(f"ARPShield — Confusion Matrix ({dataset_name})")
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("True")
         ax.set_xticks([0, 1])
         ax.set_yticks([0, 1])
         ax.set_xticklabels(["Normal", "Attack"])
         ax.set_yticklabels(["Normal", "Attack"])
         for i in range(2):
             for j in range(2):
-                ax.text(j, i, str(cm[i, j]), ha="center", va="center",
-                        color="white" if cm[i, j] > cm.max() / 2 else "black",
-                        fontsize=16)
+                ax.text(
+                    j, i, str(cm[i, j]), ha="center", va="center",
+                    color="white" if cm[i, j] > cm.max() / 2 else "black",
+                    fontsize=16,
+                )
         fig.colorbar(im)
-        plot_path = os.path.join(output_dir, "confusion_matrix.png")
+        plot_path = os.path.join(output_dir, f"confusion_matrix_{dataset_name.lower()}.png")
         fig.savefig(plot_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
-        metrics["confusion_matrix_plot"] = plot_path
-        print(f"  Saved confusion matrix plot: {plot_path}")
 
-        # Score distribution by true label
+        # Score distribution
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.hist(normal_scores, bins=50, alpha=0.7,
                 label=f"Normal (n={len(normal_scores)})", color="#2196F3")
         ax.hist(attack_scores, bins=50, alpha=0.7,
                 label=f"Attack (n={len(attack_scores)})", color="#F44336")
-        ax.set_xlabel("Anomaly Score (decision_function)")
+        ax.set_xlabel("Anomaly Score")
         ax.set_ylabel("Count")
-        ax.set_title("ARPShield — Score Distribution by True Label")
+        ax.set_title(f"ARPShield — Score Distribution ({dataset_name})")
         ax.legend()
         ax.grid(True, alpha=0.3)
-        plot_path = os.path.join(output_dir, "score_distribution_by_label.png")
+        plot_path = os.path.join(output_dir, f"score_distribution_{dataset_name.lower()}.png")
         fig.savefig(plot_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
-        metrics["score_distribution_plot"] = plot_path
-        print(f"  Saved score distribution plot: {plot_path}")
 
     return metrics
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ARPShield — Evaluate anomaly detection model"
+        description="ARPShield — Evaluate model predictions"
     )
     parser.add_argument(
         "--predictions",
         default=os.path.join("ml", "data", "processed", "predictions.csv"),
-        help="Path to predictions CSV",
     )
     parser.add_argument(
         "--output-dir",
         default=os.path.join("ml", "data", "processed"),
-        help="Directory for evaluation outputs",
+    )
+    parser.add_argument(
+        "--dataset-name",
+        default="Test",
+        help="Name of the dataset being evaluated (e.g. Train, Test)",
     )
     args = parser.parse_args()
 
@@ -267,7 +224,7 @@ def main():
     print("ARPShield — Model Evaluation")
     print("=" * 60)
     print(f"  Predictions: {args.predictions}")
-    print(f"  Output dir:  {args.output_dir}")
+    print(f"  Dataset:     {args.dataset_name}")
     print()
 
     if not os.path.isfile(args.predictions):
@@ -275,69 +232,50 @@ def main():
         sys.exit(1)
 
     df = pd.read_csv(args.predictions)
-    print(f"  Loaded {len(df)} prediction samples")
 
     required = {"anomaly_prediction", "anomaly_score"}
     if not required.issubset(set(df.columns)):
-        print(f"ERROR: Missing required columns. Need: {required}")
+        print(f"ERROR: Missing required columns: {required - set(df.columns)}")
         sys.exit(1)
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Select evaluation mode based on label presence
     if "label" in df.columns:
-        print("  Ground-truth labels found — running SUPERVISED evaluation")
-        print(f"  Label distribution: {dict(df['label'].value_counts())}")
+        print("  Labels found — SUPERVISED evaluation")
+        print("  (Isolation Forest is unsupervised; labels are used for")
+        print("   post-hoc evaluation only, not for training.)")
         print()
-        metrics = evaluate_supervised(df, args.output_dir)
+        metrics = evaluate_supervised(df, args.output_dir, args.dataset_name)
 
-        print("  === Classification Results ===")
-        print(f"    Accuracy:           {metrics['accuracy']:.4f}")
-        print(f"    Precision:          {metrics['precision']:.4f}")
-        print(f"    Recall:             {metrics['recall']:.4f}")
-        print(f"    F1-score:           {metrics['f1_score']:.4f}")
+        print(f"  === {args.dataset_name} Set Results ===")
+        print(f"    Accuracy:            {metrics['accuracy']:.4f}")
+        print(f"    Precision:           {metrics['precision']:.4f}")
+        print(f"    Recall:              {metrics['recall']:.4f}")
+        print(f"    F1-score:            {metrics['f1_score']:.4f}")
         print(f"    False Positive Rate: {metrics['false_positive_rate']:.4f}")
-        print()
-        print("  Confusion Matrix:")
         cm = metrics["confusion_matrix"]
-        print(f"    TN={cm['true_negative']}  FP={cm['false_positive']}")
-        print(f"    FN={cm['false_negative']}  TP={cm['true_positive']}")
-        print()
-        print("  Full Classification Report:")
-        print(metrics["classification_report"])
-
-        # Score separation
-        sc = metrics["score_by_true_label"]
-        print(f"  Score separation (normal vs attack):")
-        print(f"    Normal mean:  {sc['normal']['mean']:.4f}")
-        print(f"    Attack mean:  {sc['attack']['mean']:.4f}")
+        print(f"    Confusion Matrix: TN={cm['true_negative']} FP={cm['false_positive']} "
+              f"FN={cm['false_negative']} TP={cm['true_positive']}")
     else:
-        print("  No ground-truth labels found — running UNSUPERVISED evaluation")
-        print()
+        print("  No labels — UNSUPERVISED evaluation")
         metrics = evaluate_unsupervised(df, args.output_dir)
 
         stats = metrics["score_statistics"]
-        print(f"  Score Distribution:")
-        print(f"    Mean:   {stats['mean']:.6f}")
-        print(f"    Std:    {stats['std']:.6f}")
-        print(f"    Min:    {stats['min']:.6f}")
-        print(f"    Max:    {stats['max']:.6f}")
-        print()
-        print(f"  Prediction Counts:")
-        print(f"    Normal:    {metrics['normal_count']}")
-        print(f"    Anomalous: {metrics['anomaly_count']}")
+        print(f"  Normal:    {metrics['normal_count']}")
+        print(f"  Anomalous: {metrics['anomaly_count']}")
+        print(f"  Score mean={stats['mean']:.6f} std={stats['std']:.6f}")
 
     print()
 
     # Save metrics
-    serialisable_metrics = {
+    serialisable = {
         k: v for k, v in metrics.items()
         if isinstance(v, (str, int, float, dict, list, bool))
     }
     metrics_path = os.path.join(args.output_dir, "evaluation_metrics.json")
     with open(metrics_path, "w", encoding="utf-8") as f:
-        json.dump(serialisable_metrics, f, indent=2)
-    print(f"  Saved evaluation metrics to: {metrics_path}")
+        json.dump(serialisable, f, indent=2)
+    print(f"  Saved metrics to: {metrics_path}")
     print()
 
 

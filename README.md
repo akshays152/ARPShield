@@ -38,7 +38,7 @@ The system architecture is highly modular, consisting of:
 | Prevention & Response | `prevention/` | 🔲 Under development | Person 4 |
 | Backend, DB & Dashboard | `backend/`, `database/`, `dashboard/` | 🔲 Under development | Person 5 |
 
-> **Note:** Not all modules are complete. The network monitoring module captures ARP traffic and provides labelled data. The ML pipeline has been trained on Person 1's captured data (6,000 records) achieving 88.73% accuracy on anomaly detection.
+> **Note:** Not all modules are complete. The network monitoring module captures ARP traffic and provides labelled data. The ML pipeline is implemented and ready for Person 1's improved v2 dataset. The initial v1 dataset was treated as a baseline engineering experiment.
 
 ## AI/ML Component
 
