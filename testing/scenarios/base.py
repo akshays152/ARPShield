@@ -37,8 +37,17 @@ def make_packet(
     target_ip: str,
     target_mac: str,
     operation: str,
+    label: str = "normal",
 ) -> Dict[str, Any]:
-    """Create a packet dict in Person 1's schema."""
+    """Create a packet dict in Person 1's schema.
+
+    Parameters
+    ----------
+    label : str
+        Ground-truth label for evaluation (e.g. 'normal',
+        'gateway_spoofing', 'ip_mac_conflict').  Not used by the
+        detection engine — only consumed by evaluation metrics.
+    """
     return {
         "timestamp": timestamp.isoformat(),
         "sender_ip": sender_ip,
@@ -46,6 +55,7 @@ def make_packet(
         "target_ip": target_ip,
         "target_mac": target_mac,
         "operation": operation,
+        "label": label,
     }
 
 

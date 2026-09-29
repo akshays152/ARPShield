@@ -1,14 +1,22 @@
 """
 DDoS Impact Analysis -- Cybersecurity analysis module.
 
+IMPORTANT DISTINCTION:
+    ARP spoofing and DDoS are distinct attacks.  This module evaluates
+    the *network disruption / availability impact* associated with
+    suspicious ARP activity.  It does NOT claim that every ARP spoofing
+    event is a DDoS attack.
+
 Compares NORMAL vs ABNORMAL (spoofing/flooding) network conditions
 to demonstrate how ARP spoofing can contribute to network disruption
 and how early detection/mitigation reduces the impact.
 
 Uses Person 1's packet schema: sender_ip, sender_mac, target_ip,
-target_mac, operation, timestamp.
+target_mac, operation, timestamp, label.
 
 This module does NOT generate any real DDoS attack.
+All results produced from synthetic test data are clearly labelled
+as "controlled synthetic evaluation".
 """
 
 from datetime import datetime
@@ -17,6 +25,13 @@ from typing import Dict, Any, List, Optional
 
 def _safe_ratio(a: int, b: int) -> float:
     return round(a / max(b, 1), 4)
+
+
+def _safe_divide(a: float, b: float, default: float = 0.0) -> float:
+    """Safe division returning *default* when divisor is zero."""
+    if b == 0:
+        return default
+    return a / b
 
 
 def analyze_traffic_profile(
@@ -29,7 +44,19 @@ def analyze_traffic_profile(
         timestamp, sender_ip, sender_mac, target_ip, target_mac, operation
     """
     if not packets:
-        return {"label": label, "total_packets": 0}
+        return {
+            "label": label,
+            "total_packets": 0,
+            "requests": 0,
+            "replies": 0,
+            "request_reply_ratio": 0.0,
+            "unique_source_ips": 0,
+            "unique_source_macs": 0,
+            "unique_target_ips": 0,
+            "conflicting_ip_mac_mappings": 0,
+            "duration_seconds": 0.0,
+            "packets_per_second": 0.0,
+        }
 
     total = len(packets)
     requests = sum(1 for p in packets if p.get("operation") == "request")
@@ -139,6 +166,193 @@ def _generate_impact_summary(
     return observations
 
 
+# ── NEW: Disruption indicator ─────────────────────────────────────────
+
+
+def compute_disruption_indicator(profile: Dict[str, Any]) -> float:
+    """Compute a 0.0–1.0 disruption score from a traffic profile.
+
+    The score is a weighted combination of:
+        - conflicting IP-MAC mappings    (40 %)
+        - unusual packets-per-second     (30 %)
+        - number of unique source MACs   (30 %)
+
+    Higher values indicate more network disruption.
+    This is a *relative* metric — not an absolute scale.
+    """
+    conflicts = profile.get("conflicting_ip_mac_mappings", 0)
+    pps = profile.get("packets_per_second", 0)
+    macs = profile.get("unique_source_macs", 0)
+
+    # Normalise each factor to [0, 1] with soft-capped denominators
+    conflict_score = min(conflicts / 5.0, 1.0)    # 5+ conflicts → 1.0
+    pps_score = min(pps / 100.0, 1.0)             # 100+ pps → 1.0
+    mac_score = min(macs / 20.0, 1.0)             # 20+ unique MACs → 1.0
+
+    return round(0.4 * conflict_score + 0.3 * pps_score + 0.3 * mac_score, 4)
+
+
+# ── NEW: analyze_ddos_impact (Step 8 requirement) ────────────────────
+
+
+def analyze_ddos_impact(
+    normal_data: List[Dict[str, Any]],
+    suspicious_data: List[Dict[str, Any]],
+    post_mitigation_data: Optional[List[Dict[str, Any]]] = None,
+    detection_latency_ms: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Deterministic DDoS/DoS impact evaluation.
+
+    Compares normal traffic against suspicious activity (and optionally
+    post-mitigation traffic) to quantify the network-disruption impact
+    of ARP spoofing-related anomalies.
+
+    Parameters
+    ----------
+    normal_data : list[dict]
+        Packet dicts from normal (baseline) traffic.
+    suspicious_data : list[dict]
+        Packet dicts from suspicious / abnormal activity.
+    post_mitigation_data : list[dict], optional
+        Packet dicts captured after Person 4's mitigation (if available).
+    detection_latency_ms : float, optional
+        Average detection latency in milliseconds.
+
+    Returns
+    -------
+    dict
+        Structured impact analysis result.  Clearly labelled as
+        *controlled synthetic evaluation* when inputs are synthetic.
+    """
+    normal_profile = analyze_traffic_profile(normal_data, "normal")
+    suspicious_profile = analyze_traffic_profile(suspicious_data, "suspicious")
+
+    normal_rate = normal_profile.get("packets_per_second", 0)
+    suspicious_rate = suspicious_profile.get("packets_per_second", 0)
+    rate_increase = _safe_divide(
+        (suspicious_rate - normal_rate) * 100,
+        max(normal_rate, 0.001),
+    )
+
+    # Affected hosts: unique sender IPs in suspicious traffic
+    affected_ips = set(p.get("sender_ip", "") for p in suspicious_data)
+    affected_macs = set(p.get("sender_mac", "") for p in suspicious_data)
+
+    # Suspicious events count (packets labelled as non-normal)
+    suspicious_events = sum(
+        1 for p in suspicious_data
+        if p.get("label", "normal") != "normal"
+    )
+
+    # Duration of abnormal activity
+    attack_duration = suspicious_profile.get("duration_seconds", 0)
+
+    # Conflicting mappings
+    ip_mac_map: Dict[str, set] = {}
+    for p in suspicious_data:
+        ip = p.get("sender_ip", "")
+        mac = p.get("sender_mac", "")
+        ip_mac_map.setdefault(ip, set()).add(mac)
+    conflicting_mappings = sum(
+        1 for macs in ip_mac_map.values() if len(macs) > 1
+    )
+
+    # Disruption indicators
+    pre_disruption = compute_disruption_indicator(suspicious_profile)
+
+    result: Dict[str, Any] = {
+        "data_source": "controlled synthetic evaluation",
+        "normal_arp_rate": round(normal_rate, 2),
+        "suspicious_arp_rate": round(suspicious_rate, 2),
+        "rate_increase_percent": round(rate_increase, 2),
+        "affected_hosts": len(affected_ips),
+        "affected_ips": sorted(affected_ips),
+        "affected_macs": sorted(affected_macs),
+        "suspicious_events": suspicious_events,
+        "attack_duration_seconds": round(attack_duration, 2),
+        "detection_latency_ms": detection_latency_ms,
+        "conflicting_mappings": conflicting_mappings,
+        "pre_mitigation_disruption": pre_disruption,
+        "post_mitigation_disruption": None,
+        "improvement_percent": None,
+    }
+
+    # Post-mitigation comparison (Step 9)
+    if post_mitigation_data is not None:
+        post_profile = analyze_traffic_profile(post_mitigation_data, "post_mitigation")
+        post_disruption = compute_disruption_indicator(post_profile)
+        result["post_mitigation_disruption"] = post_disruption
+        if pre_disruption > 0:
+            improvement = ((pre_disruption - post_disruption) / pre_disruption) * 100
+            result["improvement_percent"] = round(improvement, 2)
+        else:
+            result["improvement_percent"] = 0.0
+        result["post_mitigation_profile"] = post_profile
+    else:
+        result["post_mitigation_note"] = (
+            "Person 4 mitigation data not available for this evaluation."
+        )
+
+    return result
+
+
+# ── NEW: compare_mitigation_phases (Step 9) ──────────────────────────
+
+
+def compare_mitigation_phases(
+    normal_data: List[Dict[str, Any]],
+    suspicious_data: List[Dict[str, Any]],
+    post_mitigation_data: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Compare ARP rate, suspicious events, affected hosts, and
+    disruption across NORMAL → SUSPICIOUS → POST-MITIGATION phases.
+
+    If post-mitigation data is unavailable (Person 4 has not supplied
+    it yet), the comparison covers only the first two phases.
+    """
+    normal_profile = analyze_traffic_profile(normal_data, "normal")
+    suspicious_profile = analyze_traffic_profile(suspicious_data, "suspicious")
+
+    phases = {
+        "normal": {
+            "arp_rate_pps": normal_profile.get("packets_per_second", 0),
+            "suspicious_events": 0,
+            "affected_hosts": normal_profile.get("unique_source_ips", 0),
+            "disruption_indicator": compute_disruption_indicator(normal_profile),
+        },
+        "suspicious_activity": {
+            "arp_rate_pps": suspicious_profile.get("packets_per_second", 0),
+            "suspicious_events": sum(
+                1 for p in suspicious_data
+                if p.get("label", "normal") != "normal"
+            ),
+            "affected_hosts": suspicious_profile.get("unique_source_ips", 0),
+            "disruption_indicator": compute_disruption_indicator(suspicious_profile),
+        },
+    }
+
+    if post_mitigation_data is not None:
+        post_profile = analyze_traffic_profile(post_mitigation_data, "post_mitigation")
+        phases["post_mitigation"] = {
+            "arp_rate_pps": post_profile.get("packets_per_second", 0),
+            "suspicious_events": sum(
+                1 for p in post_mitigation_data
+                if p.get("label", "normal") != "normal"
+            ),
+            "affected_hosts": post_profile.get("unique_source_ips", 0),
+            "disruption_indicator": compute_disruption_indicator(post_profile),
+        }
+    else:
+        phases["post_mitigation"] = {
+            "note": "Person 4 mitigation data not yet available."
+        }
+
+    return phases
+
+
+# ── Original build_ddos_impact_report (preserved) ────────────────────
+
+
 def build_ddos_impact_report(
     normal_packets: List[Dict[str, Any]],
     abnormal_packets: List[Dict[str, Any]],
@@ -183,6 +397,19 @@ def build_ddos_impact_report(
         if e.get("affected_mac"):
             affected_macs.add(e["affected_mac"])
 
+    # Extended impact analysis via new function
+    ddos_impact = analyze_ddos_impact(
+        normal_data=normal_packets,
+        suspicious_data=abnormal_packets,
+        detection_latency_ms=detection_time_ms,
+    )
+
+    # Phase comparison
+    phase_comparison = compare_mitigation_phases(
+        normal_data=normal_packets,
+        suspicious_data=abnormal_packets,
+    )
+
     report = {
         "traffic_comparison": comparison,
         "detection_summary": {
@@ -194,6 +421,8 @@ def build_ddos_impact_report(
             "affected_device_count": len(affected_ips),
         },
         "detection_time_ms": detection_time_ms,
+        "ddos_impact_analysis": ddos_impact,
+        "phase_comparison": phase_comparison,
     }
 
     # Person 4 mitigation integration

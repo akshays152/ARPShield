@@ -49,6 +49,7 @@ class IPMACConflictScenario(BaseScenario):
                 target_ip=GATEWAY_IP,
                 target_mac=BROADCAST_MAC,
                 operation="request",
+                label="normal",
             ))
 
         # Phase 2: attacker sends replies claiming victim's IP with fake MAC
@@ -63,6 +64,7 @@ class IPMACConflictScenario(BaseScenario):
                 target_ip=dst_ip,
                 target_mac=NORMAL_HOSTS.get(dst_ip, BROADCAST_MAC),
                 operation="reply",
+                label="ip_mac_conflict",
             ))
 
         return ScenarioResult(

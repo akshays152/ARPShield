@@ -48,6 +48,7 @@ class GatewaySpoofingScenario(BaseScenario):
                 target_ip=dst_ip,
                 target_mac=NORMAL_HOSTS[dst_ip],
                 operation="reply",
+                label="normal",
             ))
 
         # Phase 2: attacker claims to be the gateway with a fake MAC
@@ -63,6 +64,7 @@ class GatewaySpoofingScenario(BaseScenario):
                 target_ip=dst_ip,
                 target_mac=NORMAL_HOSTS[dst_ip],
                 operation="reply",
+                label="gateway_spoofing",
             ))
 
         return ScenarioResult(

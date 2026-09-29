@@ -51,6 +51,7 @@ class HighARPRateScenario(BaseScenario):
                 target_ip=GATEWAY_IP,
                 target_mac=BROADCAST_MAC,
                 operation="request",
+                label="normal",
             ))
 
         # Phase 2: ARP flood -- rapid packets from a single attacker MAC
@@ -66,6 +67,7 @@ class HighARPRateScenario(BaseScenario):
                 target_ip=target_ip,
                 target_mac=BROADCAST_MAC,
                 operation="request",
+                label="high_arp_rate",
             ))
 
         return ScenarioResult(

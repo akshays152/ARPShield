@@ -50,6 +50,7 @@ class SuspiciousRepliesScenario(BaseScenario):
                 target_ip=GATEWAY_IP,
                 target_mac=BROADCAST_MAC,
                 operation="request",
+                label="normal",
             ))
 
         # Phase 2: unsolicited replies with spoofed MAC
@@ -65,6 +66,7 @@ class SuspiciousRepliesScenario(BaseScenario):
                 target_ip=dst_ip,
                 target_mac=NORMAL_HOSTS[dst_ip],
                 operation="reply",
+                label="suspicious_reply",
             ))
 
         return ScenarioResult(

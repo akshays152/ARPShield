@@ -50,6 +50,7 @@ class DuplicateIPScenario(BaseScenario):
                 target_ip=GATEWAY_IP,
                 target_mac=BROADCAST_MAC,
                 operation="request",
+                label="normal",
             ))
 
         # Phase 2: many MACs claim the same IP
@@ -63,6 +64,7 @@ class DuplicateIPScenario(BaseScenario):
                 target_ip=GATEWAY_IP,
                 target_mac=BROADCAST_MAC,
                 operation="request",
+                label="duplicate_ip",
             ))
 
         return ScenarioResult(

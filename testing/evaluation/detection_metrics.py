@@ -56,6 +56,7 @@ def compute_detection_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     total = tp + tn + fp + fn
 
+    accuracy = (tp + tn) / max(total, 1)
     detection_rate = tp / max(tp + fn, 1)
     false_positive_rate = fp / max(fp + tn, 1)
     false_negative_rate = fn / max(fn + tp, 1)
@@ -69,6 +70,7 @@ def compute_detection_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "true_negatives": tn,
         "false_positives": fp,
         "false_negatives": fn,
+        "accuracy": round(accuracy, 4),
         "detection_rate": round(detection_rate, 4),
         "false_positive_rate": round(false_positive_rate, 4),
         "false_negative_rate": round(false_negative_rate, 4),

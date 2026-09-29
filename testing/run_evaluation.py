@@ -9,7 +9,8 @@ Main entry point that:
   5. Calculates cybersecurity detection metrics
   6. Performs DDoS / network-impact analysis
   7. Optionally consumes Person 4's mitigation data
-  8. Generates JSON, CSV, and human-readable reports
+  8. Generates JSON, CSV, Markdown and human-readable reports
+  9. Generates evaluation charts (if matplotlib is available)
 
 Usage (standalone with stub detector):
     python -m testing.run_evaluation
@@ -50,6 +51,12 @@ from testing.evaluation.detection_time import compute_detection_time_metrics
 from testing.evaluation.false_positive_analysis import analyze_false_positives
 from testing.evaluation.ddos_impact import build_ddos_impact_report
 from testing.evaluation.report_generator import generate_report
+
+try:
+    from testing.evaluation.visualize import generate_charts
+    CHARTS_AVAILABLE = True
+except ImportError:
+    CHARTS_AVAILABLE = False
 
 
 # ── All registered scenarios ──────────────────────────────────────────
@@ -186,7 +193,7 @@ def run_evaluation(
             normal_packets_all.extend(outcome["_packets"])
 
         status = "PASS" if outcome["detection_status"] == "PASS" else "FAIL"
-        print(f"  [{status}]  (events={outcome['num_events']})")
+        print(f"  [{status}]  (events={outcome['num_events']}, packets={outcome['total_packets']})")
 
     print()
 
@@ -200,6 +207,7 @@ def run_evaluation(
           f"TN={detection_metrics['true_negatives']}  "
           f"FP={detection_metrics['false_positives']}  "
           f"FN={detection_metrics['false_negatives']}")
+    print(f"  Accuracy:        {detection_metrics['accuracy']:.4f}")
     print(f"  Detection Rate:  {detection_metrics['detection_rate']:.4f}")
     print(f"  Precision:       {detection_metrics['precision']:.4f}")
     print(f"  Recall:          {detection_metrics['recall']:.4f}")
@@ -207,7 +215,19 @@ def run_evaluation(
     print(f"  FP Rate:         {detection_metrics['false_positive_rate']:.4f}")
     print()
 
-    # ── 3. DDoS impact analysis ───────────────────────────────────────
+    # ── 3. False positive summary ─────────────────────────────────────
+    total_normal = sum(1 for r in results if not r.get("is_attack"))
+    total_normal_flagged = fp_analysis.get("total_false_positives", 0)
+    print("--- False Positive Analysis -----------------------------------")
+    print(f"  Normal scenarios:     {total_normal}")
+    print(f"  Incorrectly flagged:  {total_normal_flagged}")
+    fp_rate_display = (total_normal_flagged / max(total_normal, 1)) * 100
+    print(f"  False Positive Rate:  {fp_rate_display:.1f}%")
+    if fp_analysis.get("total_false_negatives", 0) > 0:
+        print(f"  Missed attacks (FN):  {fp_analysis['total_false_negatives']}")
+    print()
+
+    # ── 4. DDoS impact analysis ───────────────────────────────────────
     all_detection_events = []
     for r in results:
         all_detection_events.extend(r.get("detection_events", []))
@@ -231,9 +251,19 @@ def run_evaluation(
     ds = ddos_impact.get("detection_summary", {})
     print(f"  Total detection events: {ds.get('total_events', 0)}")
     print(f"  Affected devices: {ds.get('affected_device_count', 0)}")
+
+    # Extended metrics
+    ext = ddos_impact.get("ddos_impact_analysis", {})
+    if ext:
+        print(f"  Normal ARP rate:       {ext.get('normal_arp_rate', 'N/A')} pps")
+        print(f"  Suspicious ARP rate:   {ext.get('suspicious_arp_rate', 'N/A')} pps")
+        print(f"  Rate increase:         {ext.get('rate_increase_percent', 'N/A')}%")
+        print(f"  Affected hosts:        {ext.get('affected_hosts', 'N/A')}")
+        print(f"  Attack duration:       {ext.get('attack_duration_seconds', 'N/A')} s")
+        print(f"  Pre-mitigation disruption:  {ext.get('pre_mitigation_disruption', 'N/A')}")
     print()
 
-    # ── 4. Generate reports ───────────────────────────────────────────
+    # ── 5. Generate reports ───────────────────────────────────────────
     # Strip internal _packets before report generation
     clean_results = [
         {k: v for k, v in r.items() if not k.startswith("_")}
@@ -252,12 +282,31 @@ def run_evaluation(
     print("--- Reports Generated -----------------------------------------")
     for kind, path in report_paths.items():
         print(f"  {kind:12s} -> {path}")
+
+    # ── 6. Generate charts ───────────────────────────────────────────
+    chart_paths = {}
+    if CHARTS_AVAILABLE:
+        chart_paths = generate_charts(
+            scenario_results=clean_results,
+            detection_metrics=detection_metrics,
+            timing_metrics=timing_metrics,
+            ddos_impact=ddos_impact,
+            output_dir=output_dir,
+            is_synthetic=True,
+        )
+        if "error" not in chart_paths:
+            print()
+            print("--- Charts Generated ------------------------------------------")
+            for name, path in chart_paths.items():
+                print(f"  {name:25s} -> {path}")
     print()
 
     if is_stub:
-        print("  NOTE: Running with StubDetector. All attack scenarios show")
-        print("  as FN (False Negative). Connect Person 2's detector via")
-        print("  the DetectionAdapter interface for real evaluation.")
+        print("  NOTE: Evaluation executed using StubDetector because")
+        print("  Person 2's detection engine is not yet integrated.")
+        print("  All attack scenarios show as FN (False Negative).")
+        print("  Connect Person 2's detector via the DetectionAdapter")
+        print("  interface for real evaluation.")
         print()
 
     print("=" * 70)
@@ -269,6 +318,7 @@ def run_evaluation(
         "fp_analysis": fp_analysis,
         "ddos_impact": ddos_impact,
         "report_paths": report_paths,
+        "chart_paths": chart_paths,
         "detector_used": detector_name,
     }
 
