@@ -170,3 +170,14 @@ ml/models/*.joblib
 ml/models/*.json
 ml/data/sample_arp_data.csv
 ml/data/processed/
+
+# ARPShield Testing — Generated evaluation results
+testing/results/*.json
+testing/results/*.csv
+testing/results/*.txt
+!testing/results/README.md
+
+# Prevention — Generated data files
+prevention/incidents.jsonl
+prevention/response_requests.json
+prevention/trusted_devices.json
