@@ -32,13 +32,14 @@ The system architecture is highly modular, consisting of:
 
 | Module | Directory | Status | Owner |
 |--------|-----------|--------|-------|
-| Network Monitoring | `network/` | 🔲 Under development | Person 1 |
-| Detection Engine | `detection/` | 🔲 Under development | Person 2 |
+| Network Monitoring | `network/` | ✅ Implemented | Person 1 |
+| Detection Engine | `detection/` | ✅ Implemented | Person 2 |
 | **ML Anomaly Detection** | **`ml/`** | **✅ Pipeline implemented** | **Person 3** |
-| Prevention & Response | `prevention/` | 🔲 Under development | Person 4 |
+| **Testing & Evaluation** | **`testing/`** | **✅ Implemented** | **Person 3** |
+| Prevention & Response | `prevention/` | ✅ Implemented | Person 4 |
 | Backend, DB & Dashboard | `backend/`, `database/`, `dashboard/` | 🔲 Under development | Person 5 |
 
-> **Note:** Not all modules are complete. The ML pipeline has been implemented and validated on synthetic data. It is ready to consume real ARP packet data once the network monitoring module is operational.
+> **Note:** The testing & evaluation module (Person 3) provides controlled scenario testing, cybersecurity detection metrics, and DDoS impact analysis for the rule-based detection engine. See [`testing/README.md`](testing/README.md) for detailed documentation.
 
 ## AI/ML Component
 
