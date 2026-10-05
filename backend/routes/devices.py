@@ -32,3 +32,22 @@ def add_device():
         "message": "Device added successfully",
         "device_id": device.id
     }), 201
+
+
+@devices_bp.route("/", methods=["GET"])
+def get_devices():
+
+    devices = (
+        Device.query
+        .order_by(Device.last_seen.desc())
+        .all()
+    )
+
+    return jsonify({
+        "status": "ok",
+        "count": len(devices),
+        "devices": [
+            device.to_dict()
+            for device in devices
+        ]
+    })

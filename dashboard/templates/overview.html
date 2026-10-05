@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}
+ARPShield // Overview
+{% endblock %}
+
+{% block page_title %}
+Network Overview
+{% endblock %}
+
+
+{% block content %}
+
+<!-- ================================
+     SECURITY METRICS
+     ================================ -->
+
+<div class="metric-grid">
+
+    <div class="metric-card cyan">
+
+        <div class="metric-label">
+            CONNECTED DEVICES
+        </div>
+
+        <div
+            class="metric-value metric-accent-cyan"
+            id="metric-devices"
+        >
+            --
+        </div>
+
+        <div class="metric-detail">
+            Devices currently observed
+        </div>
+
+    </div>
+
+
+    <div class="metric-card green">
+
+        <div class="metric-label">
+            SYSTEM HEALTH
+        </div>
+
+        <div
+            class="metric-value metric-accent-green"
+            id="metric-health"
+        >
+            --
+        </div>
+
+        <div class="metric-detail">
+            Network operating normally
+        </div>
+
+    </div>
+
+
+    <div class="metric-card red">
+
+        <div class="metric-label">
+            ACTIVE THREATS
+        </div>
+
+        <div
+            class="metric-value metric-accent-red"
+            id="metric-threats"
+        >
+            --
+        </div>
+
+        <div class="metric-detail">
+            Requires investigation
+        </div>
+
+    </div>
+
+
+    <div class="metric-card purple">
+
+        <div class="metric-label">
+            ARP RATE
+        </div>
+
+        <div
+            class="metric-value metric-accent-purple"
+            id="metric-arp"
+        >
+            --
+        </div>
+
+        <div class="metric-detail">
+            packets / second
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ================================
+     TRAFFIC + SECURITY EVENTS
+     ================================ -->
+
+<div class="panel-grid">
+
+    <div class="panel">
+
+        <div class="panel-header">
+
+            <span class="panel-title">
+                ARP_TRAFFIC // LIVE
+            </span>
+
+            <span class="panel-tag">
+                REAL-TIME
+            </span>
+
+        </div>
+
+        <div class="panel-body">
+
+            <div class="traffic-chart">
+
+                <div class="traffic-bar" style="--height: 25%;"></div>
+                <div class="traffic-bar" style="--height: 38%;"></div>
+                <div class="traffic-bar" style="--height: 30%;"></div>
+                <div class="traffic-bar" style="--height: 52%;"></div>
+                <div class="traffic-bar" style="--height: 42%;"></div>
+                <div class="traffic-bar" style="--height: 68%;"></div>
+                <div class="traffic-bar" style="--height: 54%;"></div>
+                <div class="traffic-bar" style="--height: 72%;"></div>
+                <div class="traffic-bar" style="--height: 48%;"></div>
+                <div class="traffic-bar" style="--height: 61%;"></div>
+                <div class="traffic-bar" style="--height: 80%;"></div>
+                <div class="traffic-bar" style="--height: 58%;"></div>
+                <div class="traffic-bar" style="--height: 44%;"></div>
+                <div class="traffic-bar" style="--height: 70%;"></div>
+                <div class="traffic-bar" style="--height: 88%;"></div>
+                <div class="traffic-bar" style="--height: 64%;"></div>
+                <div class="traffic-bar" style="--height: 49%;"></div>
+                <div class="traffic-bar" style="--height: 75%;"></div>
+                <div class="traffic-bar" style="--height: 55%;"></div>
+                <div class="traffic-bar" style="--height: 69%;"></div>
+                <div class="traffic-bar" style="--height: 82%;"></div>
+                <div class="traffic-bar" style="--height: 57%;"></div>
+                <div class="traffic-bar" style="--height: 45%;"></div>
+                <div class="traffic-bar" style="--height: 73%;"></div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="panel">
+
+        <div class="panel-header">
+
+            <span class="panel-title">
+                SECURITY_EVENTS
+            </span>
+
+            <span class="panel-tag">
+                LAST 24H
+            </span>
+
+        </div>
+
+        <div 
+            class="event-list"
+            id="security-events"
+        >
+
+            <div class="empty-state">
+
+                <span class="empty-icon">✓</span>
+
+                <div>
+
+                    <div class="empty-title">
+                        LOADING SECURITY EVENTS
+                    </div>
+
+                    <div class="empty-description">
+                        Connecting to ARPShield security feed...
+                    </div>
+
+                </div>
+                
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ================================
+     SYSTEM STATUS
+     ================================ -->
+
+<div class="status-row">
+
+    <div class="status-card">
+
+        <div class="status-icon">◈</div>
+
+        <div>
+            <div class="status-card-label">
+                DETECTION ENGINE
+            </div>
+
+            <div class="status-card-value">
+                ● OPERATIONAL
+            </div>
+        </div>
+
+    </div>
+
+
+    <div class="status-card">
+
+        <div class="status-icon">▣</div>
+
+        <div>
+            <div class="status-card-label">
+                DATABASE
+            </div>
+
+            <div class="status-card-value">
+                ● CONNECTED
+            </div>
+        </div>
+
+    </div>
+
+
+    <div class="status-card">
+
+        <div class="status-icon">⌁</div>
+
+        <div>
+            <div class="status-card-label">
+                ARP MONITOR
+            </div>
+
+            <div class="status-card-value">
+                ● ACTIVE
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

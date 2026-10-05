@@ -1,0 +1,43 @@
+:root {
+
+    /* CORE */
+    --bg-main: #070a0f;
+    --bg-sidebar: #090d13;
+    --bg-panel: #0d131b;
+    --bg-panel-alt: #111923;
+
+    /* BORDERS */
+    --border: #1c2a35;
+    --border-bright: #263b49;
+
+    /* NEON */
+    --cyan: #00f0ff;
+    --cyan-dim: #00a8b5;
+
+    --green: #39ff88;
+    --green-dim: #159957;
+
+    --purple: #a855f7;
+    --purple-dim: #7030a8;
+
+    --yellow: #ffd43b;
+    --red: #ff3864;
+
+    /* TEXT */
+    --text-primary: #e8f1f5;
+    --text-secondary: #8b9aa7;
+    --text-muted: #53616d;
+
+    /* EFFECTS */
+    --glow-cyan: 0 0 12px rgba(0, 240, 255, 0.35);
+    --glow-green: 0 0 12px rgba(57, 255, 136, 0.35);
+    --glow-red: 0 0 12px rgba(255, 56, 100, 0.35);
+
+    /* LAYOUT */
+    --sidebar-width: 245px;
+    --radius: 8px;
+
+    /* TYPOGRAPHY */
+    --font-ui: "Segoe UI", Arial, sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", monospace;
+}

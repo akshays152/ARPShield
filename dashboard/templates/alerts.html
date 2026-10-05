@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}
+ARPShield // Alerts
+{% endblock %}
+
+{% block page_title %}
+Security Alerts
+{% endblock %}
+
+{% block content %}
+
+<div class="page-intro">
+
+    <div>
+        <div class="section-kicker">
+            THREAT DETECTION
+        </div>
+
+        <p>
+            Rule-based security events detected by ARPShield.
+        </p>
+    </div>
+
+    <div class="live-indicator">
+        <span class="pulse-dot"></span>
+        LIVE SECURITY FEED
+    </div>
+
+</div>
+
+
+<!-- ALERT SUMMARY -->
+
+<div class="alert-summary-grid">
+
+    <div class="alert-summary-card critical">
+
+        <div class="alert-summary-label">
+            CRITICAL
+        </div>
+
+        <div
+            class="alert-summary-value"
+            id="critical-count"
+        >
+            --
+        </div>
+
+    </div>
+
+
+    <div class="alert-summary-card high">
+
+        <div class="alert-summary-label">
+            HIGH
+        </div>
+
+        <div
+            class="alert-summary-value"
+            id="high-count"
+        >
+            --
+        </div>
+
+    </div>
+
+
+    <div class="alert-summary-card medium">
+
+        <div class="alert-summary-label">
+            MEDIUM
+        </div>
+
+        <div
+            class="alert-summary-value"
+            id="medium-count"
+        >
+            --
+        </div>
+
+    </div>
+
+
+    <div class="alert-summary-card low">
+
+        <div class="alert-summary-label">
+            LOW
+        </div>
+
+        <div
+            class="alert-summary-value"
+            id="low-count"
+        >
+            --
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ALERT FEED -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <span class="panel-title">
+            SECURITY_ALERT_FEED
+        </span>
+
+        <span
+            class="panel-tag"
+            id="alert-count"
+        >
+            LOADING
+        </span>
+
+    </div>
+
+
+    <div id="alert-feed">
+
+        <div class="alert-loading">
+            CONNECTING TO SECURITY FEED...
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

@@ -170,3 +170,6 @@ ml/models/*.joblib
 ml/models/*.json
 ml/data/sample_arp_data.csv
 ml/data/processed/
+
+# ARPShield live capture artifacts
+arp_capture_session_*.csv

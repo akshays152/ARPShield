@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}
+ARPShield // Incidents
+{% endblock %}
+
+{% block page_title %}
+Incident Response
+{% endblock %}
+
+{% block content %}
+
+<div class="page-intro">
+
+    <div>
+        <div class="section-kicker">
+            INCIDENT MANAGEMENT
+        </div>
+
+        <p>
+            Correlated security events requiring investigation or response.
+        </p>
+    </div>
+
+    <div class="live-indicator">
+        <span class="pulse-dot"></span>
+        INCIDENT MONITORING
+    </div>
+
+</div>
+
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <span class="panel-title">
+            INCIDENT_REGISTRY
+        </span>
+
+        <span
+            class="panel-tag"
+            id="incident-count"
+        >
+            LOADING
+        </span>
+
+    </div>
+
+
+    <div class="incident-list" id="incident-list">
+
+        <div class="alert-loading">
+            LOADING INCIDENT REGISTRY...
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

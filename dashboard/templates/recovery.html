@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}
+ARPShield // Recovery
+{% endblock %}
+
+{% block page_title %}
+Recovery Monitoring
+{% endblock %}
+
+{% block content %}
+
+<div class="page-intro">
+
+    <div>
+        <div class="section-kicker">
+            POST-MITIGATION HEALTH
+        </div>
+
+        <p>
+            Monitoring network stability following defensive mitigation.
+        </p>
+    </div>
+
+    <div class="live-indicator">
+        <span class="pulse-dot"></span>
+        RECOVERY MONITORING
+    </div>
+
+</div>
+
+
+<!-- RECOVERY STATUS -->
+
+<div
+    class="recovery-status-card"
+    id="recovery-status-card"
+>
+
+    <div class="recovery-status-label">
+        CURRENT RECOVERY STATE
+    </div>
+
+    <div
+        class="recovery-status-value"
+        id="recovery-status"
+    >
+        NO DATA
+    </div>
+
+    <div
+        class="recovery-status-detail"
+        id="recovery-detail"
+    >
+        No recovery telemetry has been recorded.
+    </div>
+
+</div>
+
+
+<!-- HEALTH CHECKS -->
+
+<div class="recovery-grid">
+
+    <div
+        class="recovery-check"
+        id="arp-cache-check"
+    >
+
+        <div class="recovery-check-label">
+            ARP CACHE
+        </div>
+
+        <div
+            class="recovery-check-value"
+            id="arp-cache-status"
+        >
+            --
+        </div>
+
+    </div>
+
+
+    <div
+        class="recovery-check"
+        id="gateway-check"
+    >
+
+        <div class="recovery-check-label">
+            GATEWAY
+        </div>
+
+        <div
+            class="recovery-check-value"
+            id="gateway-status"
+        >
+            --
+        </div>
+
+    </div>
+
+
+    <div
+        class="recovery-check"
+        id="traffic-check"
+    >
+
+        <div class="recovery-check-label">
+            TRAFFIC
+        </div>
+
+        <div
+            class="recovery-check-value"
+            id="traffic-status"
+        >
+            --
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- RECOVERY HISTORY -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <span class="panel-title">
+            RECOVERY_TELEMETRY
+        </span>
+
+        <span
+            class="panel-tag"
+            id="recovery-count"
+        >
+            0 LOGS
+        </span>
+
+    </div>
+
+
+    <div
+        class="recovery-list"
+        id="recovery-list"
+    >
+
+        <div class="alert-loading">
+            LOADING RECOVERY TELEMETRY...
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
