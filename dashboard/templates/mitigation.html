@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}
+ARPShield // Mitigation
+{% endblock %}
+
+{% block page_title %}
+Mitigation & Response
+{% endblock %}
+
+{% block content %}
+
+<div class="page-intro">
+
+    <div>
+        <div class="section-kicker">
+            DEFENSIVE RESPONSE
+        </div>
+
+        <p>
+            Review, approve, and track defensive mitigation requests.
+        </p>
+    </div>
+
+    <div class="live-indicator">
+        <span class="pulse-dot"></span>
+        RESPONSE MONITORING
+    </div>
+
+</div>
+
+
+<div class="mitigation-warning">
+
+    <span class="pulse-dot"></span>
+
+    <span>
+        MITIGATION ACTIONS REQUIRE EXPLICIT APPROVAL
+    </span>
+
+</div>
+
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <span class="panel-title">
+            MITIGATION_REQUESTS
+        </span>
+
+        <span
+            class="panel-tag"
+            id="mitigation-count"
+        >
+            LOADING
+        </span>
+
+    </div>
+
+
+    <div
+        class="mitigation-list"
+        id="mitigation-list"
+    >
+
+        <div class="alert-loading">
+            LOADING MITIGATION REQUESTS...
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

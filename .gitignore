@@ -181,3 +181,6 @@ testing/results/*.txt
 prevention/incidents.jsonl
 prevention/response_requests.json
 prevention/trusted_devices.json
+
+# ARPShield live capture artifacts
+arp_capture_session_*.csv

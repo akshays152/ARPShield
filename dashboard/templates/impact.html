@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}
+ARPShield // Network Impact
+{% endblock %}
+
+{% block page_title %}
+Network Impact
+{% endblock %}
+
+{% block content %}
+
+<div class="page-intro">
+
+    <div>
+        <div class="section-kicker">
+            NETWORK TELEMETRY
+        </div>
+
+        <p>
+            Quantitative ARP traffic and network impact measurements.
+        </p>
+    </div>
+
+    <div class="live-indicator">
+        <span class="pulse-dot"></span>
+        IMPACT MONITORING
+    </div>
+
+</div>
+
+
+<!-- METRIC CARDS -->
+
+<div class="impact-grid">
+
+    <div class="impact-card">
+
+        <div class="impact-label">
+            ARP RATE
+        </div>
+
+        <div
+            class="impact-value"
+            id="impact-arp-rate"
+        >
+            --
+        </div>
+
+        <div class="impact-unit">
+            PACKETS / SEC
+        </div>
+
+    </div>
+
+
+    <div class="impact-card">
+
+        <div class="impact-label">
+            REQUEST / REPLY
+        </div>
+
+        <div
+            class="impact-value"
+            id="impact-ratio"
+        >
+            --
+        </div>
+
+        <div class="impact-unit">
+            RATIO
+        </div>
+
+    </div>
+
+
+    <div class="impact-card">
+
+        <div class="impact-label">
+            UNIQUE MACs
+        </div>
+
+        <div
+            class="impact-value"
+            id="impact-macs"
+        >
+            --
+        </div>
+
+        <div class="impact-unit">
+            OBSERVED
+        </div>
+
+    </div>
+
+
+    <div class="impact-card">
+
+        <div class="impact-label">
+            AFFECTED HOSTS
+        </div>
+
+        <div
+            class="impact-value"
+            id="impact-hosts"
+        >
+            --
+        </div>
+
+        <div class="impact-unit">
+            HOSTS
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- FLOOD STATUS -->
+
+<div
+    class="flood-status"
+    id="flood-status"
+>
+
+    <span class="pulse-dot"></span>
+
+    <span id="flood-status-text">
+        CHECKING NETWORK FLOOD STATUS...
+    </span>
+
+</div>
+
+
+<!-- CHART -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <span class="panel-title">
+            ARP_RATE_HISTORY
+        </span>
+
+        <span
+            class="panel-tag"
+            id="impact-sample-count"
+        >
+            0 SAMPLES
+        </span>
+
+    </div>
+
+    <div class="chart-container">
+
+        <canvas id="arp-rate-chart"></canvas>
+
+    </div>
+
+</div>
+
+
+<!-- LATEST METRIC -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <span class="panel-title">
+            LATEST_NETWORK_METRIC
+        </span>
+
+    </div>
+
+
+    <div class="impact-details">
+
+        <div>
+            <span class="detail-label">
+                BANDWIDTH
+            </span>
+
+            <span
+                class="detail-value"
+                id="impact-bandwidth"
+            >
+                --
+            </span>
+        </div>
+
+
+        <div>
+            <span class="detail-label">
+                TIMESTAMP
+            </span>
+
+            <span
+                class="detail-value"
+                id="impact-timestamp"
+            >
+                --
+            </span>
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

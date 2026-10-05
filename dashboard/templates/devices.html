@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}
+ARPShield // Devices
+{% endblock %}
+
+{% block page_title %}
+Device Registry
+{% endblock %}
+
+{% block content %}
+
+<div class="page-intro">
+    <div>
+        <div class="section-kicker">NETWORK INVENTORY</div>
+        <p>
+            Devices observed by the ARPShield monitoring engine.
+        </p>
+    </div>
+
+    <div class="live-indicator">
+        <span class="pulse-dot"></span>
+        LIVE DATA
+    </div>
+</div>
+
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <span class="panel-title">
+            DEVICE_REGISTRY
+        </span>
+
+        <span
+            class="panel-tag"
+            id="device-count"
+        >
+            LOADING
+        </span>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table class="data-table">
+
+            <thead>
+                <tr>
+                    <th>STATUS</th>
+                    <th>IP ADDRESS</th>
+                    <th>MAC ADDRESS</th>
+                    <th>HOSTNAME</th>
+                    <th>TRUSTED</th>
+                    <th>LAST SEEN</th>
+                </tr>
+            </thead>
+
+            <tbody id="device-table-body">
+
+                <tr>
+                    <td colspan="6">
+                        <div class="table-loading">
+                            CONNECTING TO DEVICE REGISTRY...
+                        </div>
+                    </td>
+                </tr>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+{% endblock %}

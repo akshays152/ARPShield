@@ -1,0 +1,519 @@
+{% extends "base.html" %}
+
+{% block title %}
+ARPShield // ARP Traffic
+{% endblock %}
+
+{% block page_title %}
+ARP Traffic
+{% endblock %}
+
+
+{% block content %}
+
+<!-- ================================
+     ARP TRAFFIC METRICS
+     ================================ -->
+
+<div class="metric-grid">
+
+    <div class="metric-card cyan">
+
+        <div class="metric-label">
+            PACKETS STORED
+        </div>
+
+        <div
+            class="metric-value metric-accent-cyan"
+            id="metric-total"
+        >
+            --
+        </div>
+
+        <div class="metric-detail">
+            Retained ARP records
+        </div>
+
+    </div>
+
+
+    <div class="metric-card purple">
+
+        <div class="metric-label">
+            SAMPLED RECORDS
+        </div>
+
+        <div
+            class="metric-value metric-accent-purple"
+            id="metric-sampled"
+        >
+            --
+        </div>
+
+        <div class="metric-detail">
+            Normal traffic retained
+        </div>
+
+    </div>
+
+
+    <div class="metric-card red">
+
+        <div class="metric-label">
+            SUSPICIOUS RECORDS
+        </div>
+
+        <div
+            class="metric-value metric-accent-red"
+            id="metric-suspicious"
+        >
+            --
+        </div>
+
+        <div class="metric-detail">
+            Retained for investigation
+        </div>
+
+    </div>
+
+
+    <div class="metric-card green">
+
+        <div class="metric-label">
+            STORAGE USED
+        </div>
+
+        <div
+            class="metric-value metric-accent-green"
+            id="metric-storage"
+        >
+            --
+        </div>
+
+        <div class="metric-detail">
+            Of configured packet capacity
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ================================
+     ARP TRAFFIC + STORAGE STATUS
+     ================================ -->
+
+<div class="panel-grid">
+
+    <div class="panel">
+
+        <div class="panel-header">
+
+            <span class="panel-title">
+                ARP_TRAFFIC // RETAINED
+            </span>
+
+            <span class="panel-tag">
+                LIVE DATA
+            </span>
+
+        </div>
+
+        <div class="panel-body">
+
+            <div
+                class="event-list"
+                id="arp-packets"
+            >
+
+                <div class="empty-state">
+
+                    <span class="empty-icon">⌁</span>
+
+                    <div>
+
+                        <div class="empty-title">
+                            LOADING ARP TRAFFIC
+                        </div>
+
+                        <div class="empty-description">
+                            Connecting to live ARP monitoring feed...
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="panel">
+
+        <div class="panel-header">
+
+            <span class="panel-title">
+                RETENTION_STATUS
+            </span>
+
+            <span class="panel-tag">
+                STORAGE
+            </span>
+
+        </div>
+
+        <div class="panel-body">
+
+            <div
+                class="event-list"
+                id="retention-status"
+            >
+
+                <div class="empty-state">
+
+                    <span class="empty-icon">◈</span>
+
+                    <div>
+
+                        <div class="empty-title">
+                            LOADING STORAGE STATUS
+                        </div>
+
+                        <div class="empty-description">
+                            Reading packet retention statistics...
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ================================
+     SYSTEM STATUS
+     ================================ -->
+
+<div class="status-row">
+
+    <div class="status-card">
+
+        <div class="status-icon">⌁</div>
+
+        <div>
+
+            <div class="status-card-label">
+                ARP CAPTURE
+            </div>
+
+            <div class="status-card-value">
+                ● ACTIVE
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="status-card">
+
+        <div class="status-icon">▣</div>
+
+        <div>
+
+            <div class="status-card-label">
+                DATABASE
+            </div>
+
+            <div class="status-card-value">
+                ● CONNECTED
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="status-card">
+
+        <div class="status-icon">◈</div>
+
+        <div>
+
+            <div class="status-card-label">
+                RETENTION ENGINE
+            </div>
+
+            <div class="status-card-value">
+                ● OPERATIONAL
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+function escapeHtml(value) {
+
+    const div = document.createElement("div");
+
+    div.textContent = value ?? "";
+
+    return div.innerHTML;
+}
+
+
+/* =================================
+   LOAD ARP STORAGE STATISTICS
+   ================================= */
+
+async function loadArpStats() {
+
+    try {
+
+        const response = await fetch("/api/arp/stats");
+
+        if (!response.ok) {
+            throw new Error("Failed to load ARP statistics");
+        }
+
+        const result = await response.json();
+
+        const stats = result.stats || {};
+
+        document.getElementById("metric-total").textContent =
+            stats.total_records ?? 0;
+
+        document.getElementById("metric-sampled").textContent =
+            stats.sampled_records ?? 0;
+
+        document.getElementById("metric-suspicious").textContent =
+            stats.suspicious_records ?? 0;
+
+        document.getElementById("metric-storage").textContent =
+            `${Number(stats.capacity_used_pct ?? 0).toFixed(2)}%`;
+
+
+        document.getElementById("retention-status").innerHTML = `
+
+            <div class="empty-state">
+
+                <span class="empty-icon">✓</span>
+
+                <div>
+
+                    <div class="empty-title">
+                        RETENTION ENGINE OPERATIONAL
+                    </div>
+
+                    <div class="empty-description">
+                        Sampling rate: 1 packet per ${stats.sample_rate ?? "—"}
+                        &nbsp;|&nbsp;
+                        Capacity: ${stats.max_records ?? "—"} records
+                    </div>
+
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+    catch (error) {
+
+        console.error("ARP stats error:", error);
+
+    }
+
+}
+
+
+/* =================================
+   LOAD RETAINED ARP PACKETS
+   ================================= */
+
+async function loadArpPackets() {
+
+    try {
+
+        const response =
+            await fetch("/api/arp/packets?limit=20");
+
+        if (!response.ok) {
+            throw new Error("Failed to load ARP packets");
+        }
+
+        const result = await response.json();
+
+        const packets = result.packets || [];
+
+        const container =
+            document.getElementById("arp-packets");
+
+
+        if (packets.length === 0) {
+
+            container.innerHTML = `
+
+                <div class="empty-state">
+
+                    <span class="empty-icon">✓</span>
+
+                    <div>
+
+                        <div class="empty-title">
+                            NO ARP TRAFFIC RETAINED
+                        </div>
+
+                        <div class="empty-description">
+                            Waiting for captured ARP packets...
+                        </div>
+
+                    </div>
+
+                </div>
+
+            `;
+
+            return;
+        }
+
+
+        container.innerHTML = packets.map(packet => {
+
+            const timestamp =
+                packet.timestamp
+                    ? new Date(packet.timestamp).toLocaleString()
+                    : "Unknown time";
+
+
+            const type =
+                packet.log_type === "suspicious"
+                    ? "SUSPICIOUS"
+                    : "SAMPLED";
+
+
+            const icon =
+                packet.log_type === "suspicious"
+                    ? "!"
+                    : "⌁";
+
+
+            return `
+
+                <div class="empty-state">
+
+                    <span class="empty-icon">
+                        ${icon}
+                    </span>
+
+                    <div style="width: 100%;">
+
+                        <div class="empty-title">
+
+                            ${escapeHtml(type)}
+                            &nbsp; // &nbsp;
+                            ${escapeHtml(
+                                (packet.operation || "UNKNOWN").toUpperCase()
+                            )}
+
+                        </div>
+
+                        <div class="empty-description">
+
+                            ${escapeHtml(timestamp)}
+
+                            &nbsp; | &nbsp;
+
+                            ${escapeHtml(packet.sender_ip || "—")}
+
+                            &nbsp; →
+
+                            ${escapeHtml(packet.target_ip || "—")}
+
+                            <br>
+
+                            ${escapeHtml(packet.sender_mac || "—")}
+
+                            &nbsp; →
+
+                            ${escapeHtml(packet.target_mac || "—")}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            `;
+
+        }).join("");
+
+    }
+
+    catch (error) {
+
+        console.error("ARP packet error:", error);
+
+        document.getElementById("arp-packets").innerHTML = `
+
+            <div class="empty-state">
+
+                <span class="empty-icon">!</span>
+
+                <div>
+
+                    <div class="empty-title">
+                        ARP FEED UNAVAILABLE
+                    </div>
+
+                    <div class="empty-description">
+                        Unable to retrieve retained ARP traffic.
+                    </div>
+
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+}
+
+
+/* =================================
+   INITIAL LOAD + AUTO REFRESH
+   ================================= */
+
+async function loadArpPage() {
+
+    await Promise.all([
+        loadArpStats(),
+        loadArpPackets()
+    ]);
+
+}
+
+
+loadArpPage();
+
+setInterval(loadArpPage, 5000);
+
+</script>
+
+{% endblock %}

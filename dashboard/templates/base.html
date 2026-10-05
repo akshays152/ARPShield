@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{% block title %}ARPShield{% endblock %}</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+
+    {% block head %}{% endblock %}
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-symbol">◈</div>
+
+                <div>
+                    <div class="brand-name">ARPSHIELD</div>
+                    <div class="brand-subtitle">NETWORK SECURITY</div>
+                </div>
+            </div>
+
+            <div class="system-status">
+                <span class="status-dot"></span>
+                <span>SYSTEM ONLINE</span>
+            </div>
+
+            <nav class="navigation">
+
+                <div class="nav-section">
+                    <div class="nav-label">MONITORING</div>
+
+                    <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
+                        <span class="nav-icon">⌂</span>
+                        <span>Overview</span>
+                    </a>
+
+                    <a href="/devices" class="nav-item {% if request.path == '/devices' %}active{% endif %}">
+                        <span class="nav-icon">◉</span>
+                        <span>Devices</span>
+                    </a>
+
+                    <a href="/arp" class="nav-item {% if request.path == '/arp' %}active{% endif %}">
+                        <span class="nav-icon">↝</span>
+                        <span>ARP Traffic</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-label">SECURITY</div>
+
+                    <a
+                        href="/alerts"
+                        class="nav-item {% if request.path == '/alerts' %}active{% endif %}"
+                    >
+                        <span class="nav-icon alert-icon">⚠</span>
+                        <span>Alerts</span>
+                    </a>
+
+                    <a
+                        href="/incidents"
+                        class="nav-item {% if request.path == '/incidents' %}active{% endif %}"
+                    >
+                        <span class="nav-icon">◆</span>
+                        <span>Incidents</span>
+                    </a>
+
+                    <a
+                        href="/impact"
+                        class="nav-item {% if request.path == '/impact' %}active{% endif %}"
+                    >
+                        <span class="nav-icon">◫</span>
+                        <span>Network Impact</span>
+                    </a>
+
+                    <a
+                        href="/mitigation"
+                        class="nav-item {% if request.path == '/mitigation' %}active{% endif %}"
+                    >
+                        <span class="nav-icon">♢</span>
+                        <span>Mitigation</span>
+                    </a>
+
+                    <a
+                        href="/recovery"
+                        class="nav-item {% if request.path == '/recovery' %}active{% endif %}"
+                    >
+                        <span class="nav-icon">↻</span>
+                        <span>Recovery</span>
+                    </a>
+                </div>
+
+            </nav>
+
+            <div class="sidebar-footer">
+
+                <div class="sidebar-metric">
+                    <span>DETECTION ENGINE</span>
+                    <strong class="online">ONLINE</strong>
+                </div>
+
+                <div class="sidebar-metric">
+                    <span>DATABASE</span>
+                    <strong class="online">CONNECTED</strong>
+                </div>
+
+                <div class="sidebar-metric">
+                    <span>MONITORING</span>
+                    <strong class="online">ACTIVE</strong>
+                </div>
+
+                <div class="version">
+                    ARPSHIELD // v1.0
+                </div>
+
+            </div>
+
+        </aside>
+
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+
+            <header class="topbar">
+
+                <div>
+                    <div class="page-kicker">SECURITY OPERATIONS CENTER</div>
+                    <h1>{% block page_title %}Network Overview{% endblock %}</h1>
+                </div>
+
+                <div class="topbar-right">
+
+                    <div class="live-indicator">
+                        <span class="pulse-dot"></span>
+                        LIVE MONITORING
+                    </div>
+
+                    <div class="clock" id="system-clock">
+                        --:--:--
+                    </div>
+
+                </div>
+
+            </header>
+
+
+            <section class="page-content">
+                {% block content %}{% endblock %}
+            </section>
+
+        </main>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+    {% block scripts %}{% endblock %}
+
+</body>
+</html>

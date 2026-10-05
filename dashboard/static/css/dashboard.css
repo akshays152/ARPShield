@@ -1,0 +1,280 @@
+.main-content {
+    flex: 1;
+    min-width: 0;
+    margin-left: var(--sidebar-width);
+}
+
+.topbar {
+    height: 90px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 0 32px;
+
+    border-bottom: 1px solid var(--border);
+
+    background: rgba(7, 10, 15, 0.88);
+    backdrop-filter: blur(12px);
+}
+
+.page-kicker {
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+.topbar h1 {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    color: var(--green);
+
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+.pulse-dot,
+.status-dot {
+    width: 7px;
+    height: 7px;
+
+    border-radius: 50%;
+
+    background: var(--green);
+    box-shadow: var(--glow-green);
+
+    animation: pulse 1.8s infinite;
+}
+
+.clock {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.page-content {
+    padding: 32px;
+}
+
+
+/* SIDEBAR */
+
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+
+    width: var(--sidebar-width);
+
+    display: flex;
+    flex-direction: column;
+
+    background: var(--bg-sidebar);
+
+    border-right: 1px solid var(--border);
+
+    z-index: 10;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    padding: 26px 22px;
+}
+
+.brand-symbol {
+    color: var(--cyan);
+
+    font-size: 26px;
+
+    text-shadow: var(--glow-cyan);
+}
+
+.brand-name {
+    color: var(--text-primary);
+
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+.brand-subtitle {
+    color: var(--text-muted);
+
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 2px;
+
+    margin-top: 3px;
+}
+
+.system-status {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+
+    margin: 0 16px 24px;
+    padding: 10px 12px;
+
+    border: 1px solid rgba(57, 255, 136, 0.15);
+    background: rgba(57, 255, 136, 0.035);
+
+    color: var(--green);
+
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+}
+
+.navigation {
+    flex: 1;
+}
+
+.nav-section {
+    margin-bottom: 25px;
+}
+
+.nav-label {
+    padding: 0 22px 9px;
+
+    color: var(--text-muted);
+
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 2px;
+}
+
+.nav-item {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+    gap: 13px;
+
+    padding: 11px 22px;
+
+    color: var(--text-secondary);
+
+    font-size: 13px;
+
+    transition:
+        color 0.2s ease,
+        background 0.2s ease;
+}
+
+.nav-item:hover {
+    color: var(--text-primary);
+    background: rgba(0, 240, 255, 0.04);
+}
+
+.nav-item.active {
+    color: var(--cyan);
+
+    background: rgba(0, 240, 255, 0.07);
+}
+
+.nav-item.active::before {
+    content: "";
+
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+
+    width: 2px;
+
+    background: var(--cyan);
+    box-shadow: var(--glow-cyan);
+}
+
+.nav-icon {
+    width: 18px;
+
+    color: inherit;
+
+    font-family: var(--font-mono);
+    text-align: center;
+}
+
+.alert-icon {
+    color: var(--yellow);
+}
+
+.sidebar-footer {
+    padding: 16px;
+
+    border-top: 1px solid var(--border);
+}
+
+.sidebar-metric {
+    display: flex;
+    justify-content: space-between;
+
+    margin-bottom: 9px;
+
+    font-family: var(--font-mono);
+    font-size: 8px;
+}
+
+.sidebar-metric span {
+    color: var(--text-muted);
+}
+
+.sidebar-metric strong {
+    font-size: 8px;
+    font-weight: 500;
+}
+
+.online {
+    color: var(--green);
+}
+
+.version {
+    margin-top: 20px;
+
+    color: var(--text-muted);
+
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 1px;
+}
+
+
+@keyframes pulse {
+
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.45;
+        transform: scale(0.8);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
