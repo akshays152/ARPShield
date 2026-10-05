@@ -1,14 +1,16 @@
 from flask import Flask
+from flask_cors import CORS
 from database.database import db
-from backend.models.device import Device
+from backend.config import Config
+import backend.models  # Ensures all 8 models are registered with SQLAlchemy
 from backend.routes.devices import devices_bp
 
 
 app = Flask(__name__)
+app.config.from_object(Config)
 
-# Database configuration
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///arpshield.db"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# Enable CORS for API routes
+CORS(app, resources={r"/api/*": {"origins": Config.CORS_ORIGINS}})
 
 # Connect the database to Flask
 db.init_app(app)
@@ -28,7 +30,9 @@ def home():
 def health():
     return {
         "status": "ok",
-        "service": "ARPShield Backend"
+        "service": "ARPShield Backend",
+        "database": "connected",
+        "architecture": "rule-based"
     }
 
 
