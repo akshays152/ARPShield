@@ -1,18 +1,22 @@
 import os
 import sys
 from datetime import datetime
+import time
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "detection", "arp-detection")))
 
 from testing.run_evaluation import run_evaluation
 from testing.integration.detection_adapter import DetectionAdapter, DetectionEvent
-from detection.src.detection_manager import DetectionManager
-from detection.src.detection_models import ARPPacket, ARPOperation
+from detection_engine.detector import ARPSpoofDetector
 from testing.integration.detection_adapter import MitigationResult
 
 class Person2Detector(DetectionAdapter):
     def __init__(self):
-        self.manager = DetectionManager()
+        original_cwd = os.getcwd()
+        os.chdir(os.path.join(original_cwd, "detection", "arp-detection"))
+        self.detector = ARPSpoofDetector()
+        os.chdir(original_cwd)
         self.stats = {
             "total_detections": 0,
             "by_severity": {},
@@ -23,43 +27,50 @@ class Person2Detector(DetectionAdapter):
     def analyze_packet(self, packet):
         self.stats["packets_processed"] += 1
         
-        # Map testing dict to Person 2 ARPPacket
+        # Map testing dict to Person 2 new dict structure
         dt_str = packet.get("timestamp", datetime.now().isoformat())
-        # Add Z if missing for fromisoformat compatibility or handle it
-        if dt_str.endswith("Z"):
-             dt_str = dt_str[:-1] + "+00:00"
-        dt = datetime.fromisoformat(dt_str)
-        op = ARPOperation.REQUEST if packet.get("operation") == "request" else ARPOperation.REPLY
+        # Try to parse timestamp to float or just use current time
+        # The detector expects a float timestamp
+        pkt_time = time.time()
+        try:
+            if isinstance(dt_str, (int, float)):
+                pkt_time = float(dt_str)
+            else:
+                if dt_str.endswith("Z"):
+                     dt_str = dt_str[:-1] + "+00:00"
+                pkt_time = datetime.fromisoformat(dt_str).timestamp()
+        except:
+            pass
+
+        op = "request" if packet.get("operation") == "request" else "reply"
         
-        arp_pkt = ARPPacket(
-            timestamp=dt,
-            source_ip=packet.get("sender_ip", ""),
-            source_mac=packet.get("sender_mac", ""),
-            target_ip=packet.get("target_ip", ""),
-            target_mac=packet.get("target_mac", ""),
-            operation=op,
-            interface="eth0",
-            packet_size=42
-        )
+        arp_pkt = {
+            "timestamp": pkt_time,
+            "src_ip": packet.get("sender_ip", ""),
+            "src_mac": packet.get("sender_mac", ""),
+            "dst_ip": packet.get("target_ip", ""),
+            "dst_mac": packet.get("target_mac", ""),
+            "op": op,
+        }
         
-        results = self.manager.process_packet(arp_pkt)
+        results = self.detector.process(arp_pkt)
         
         events = []
         for r in results:
             self.stats["total_detections"] += 1
-            sev = r.severity.value
-            ev_type = r.event_type.value
+            sev = r.get("severity", "MEDIUM")
+            ev_type = r.get("rule", "UNKNOWN_RULE")
             self.stats["by_severity"][sev] = self.stats["by_severity"].get(sev, 0) + 1
             self.stats["by_event_type"][ev_type] = self.stats["by_event_type"].get(ev_type, 0) + 1
             
             events.append(DetectionEvent(
                 event_type=ev_type,
                 severity=sev,
-                reason=r.reason,
-                affected_ip=r.affected_device.get("ip", ""),
-                affected_mac=r.affected_device.get("mac", ""),
-                timestamp=r.timestamp.isoformat(),
-                additional_info=r.additional_info
+                reason=r.get("reason", ""),
+                affected_ip=arp_pkt["src_ip"],
+                affected_mac=arp_pkt["src_mac"],
+                timestamp=datetime.fromtimestamp(pkt_time).isoformat(),
+                additional_info={}
             ))
         return events
 
@@ -73,7 +84,10 @@ class Person2Detector(DetectionAdapter):
         return self.stats
 
     def reset(self):
-        self.manager.clear_history()
+        original_cwd = os.getcwd()
+        os.chdir(os.path.join(original_cwd, "detection", "arp-detection"))
+        self.detector = ARPSpoofDetector()
+        os.chdir(original_cwd)
         self.stats = {
             "total_detections": 0,
             "by_severity": {},
@@ -93,7 +107,7 @@ if __name__ == "__main__":
         devices_after=4
     )
     
-    print("Running final evaluation with Person 2's DetectionManager...")
+    print("Running final evaluation with Person 2's new ARPSpoofDetector...")
     results = run_evaluation(
         detector=Person2Detector(),
         mitigation=mitigation_res,
