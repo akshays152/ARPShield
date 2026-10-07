@@ -1,0 +1,70 @@
+======================================================================
+  ARPShield — Testing & Evaluation Report (Person 3)
+======================================================================
+  Generated: 2026-10-07T06:17:19.649207+00:00
+  Data Classification: controlled synthetic evaluation
+
+─── TEST SCENARIOS ──────────────────────────────────────
+  [✅ PASS] normal_arp
+        Expected detection: False  |  Actual: False
+  [✅ PASS] ip_mac_conflict
+        Expected detection: True  |  Actual: True
+        Detection latency: 3.3 ms
+  [❌ FAIL] gateway_spoofing
+        Expected detection: True  |  Actual: False
+  [✅ PASS] duplicate_ip
+        Expected detection: True  |  Actual: True
+        Detection latency: 2.5 ms
+  [✅ PASS] suspicious_replies
+        Expected detection: True  |  Actual: True
+        Detection latency: 3.1 ms
+  [✅ PASS] high_arp_rate
+        Expected detection: True  |  Actual: True
+        Detection latency: 66.5 ms
+
+─── DETECTION METRICS ───────────────────────────────────
+  True Positives:       4
+  True Negatives:       1
+  False Positives:      0
+  False Negatives:      1
+  Accuracy:             0.8333
+  Detection Rate:       0.8000
+  False Positive Rate:  0.0000
+  False Negative Rate:  0.2000
+  Precision:            1.0000
+  Recall:               0.8000
+  F1 Score:             0.8889
+
+─── DETECTION TIMING ───────────────────────────────────
+  Average:  18.85 ms
+  Minimum:  2.47 ms
+  Maximum:  66.54 ms
+  Median:   3.2 ms
+
+─── FALSE POSITIVE / NEGATIVE DETAIL ───────────────────
+  FP scenarios: 0
+  FN scenarios: 1
+
+─── DDoS / NETWORK IMPACT ANALYSIS ─────────────────────
+  • ARP packet rate increased 19.2x during abnormal conditions (9.2 vs 0.5 pps)
+  • IP-MAC conflicts rose from 0 to 4 during the attack, indicating active ARP spoofing
+  • Number of unique source MACs increased from 7 to 15, suggesting forged MAC addresses on the network
+  Total detection events: 231
+  Affected devices: 3
+  Normal ARP rate:       0.48 pps
+  Suspicious ARP rate:   9.24 pps
+  Rate increase:         1825.0%
+  Affected hosts:        8
+  Attack duration:       24.67 s
+  Pre-mitigation disruption:  0.5727
+  Post-mitigation disruption: None
+  Mitigation triggered: YES
+  Mitigation result: SUCCESS
+
+─── CONCLUSIONS ────────────────────────────────────────
+  • Detection rate is 80% — adequate but some attack patterns are missed
+  • Zero false positives observed across all normal traffic scenarios
+  • Overall F1 score: 0.8889
+  • Average detection latency: 18.9 ms
+
+======================================================================

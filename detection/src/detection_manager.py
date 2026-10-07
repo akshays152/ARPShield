@@ -68,7 +68,7 @@ class DetectionManager:
         thresholds = self.alert_thresholds.get(detection.severity, {})
         
         if thresholds.get('console', False):
-            print(f"\n🚨 ALERT: {detection.reason}")
+            print(f"\n[!] ALERT: {detection.reason}")
             print(f"   Severity: {detection.severity.value}")
             print(f"   Device: {detection.affected_device}\n")
     

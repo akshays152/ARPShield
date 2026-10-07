@@ -1,0 +1,296 @@
+{
+  "report_metadata": {
+    "generated_at": "2026-10-07T06:17:19.649207+00:00",
+    "module": "ARPShield Testing & Evaluation (Person 3)",
+    "version": "2.0.0",
+    "data_classification": "controlled synthetic evaluation"
+  },
+  "test_environment": {
+    "description": "Simulated ARP traffic in an isolated lab environment",
+    "note": "All packets are synthetic test data \u2014 no live network was used",
+    "detector": "StubDetector (Person 2 not connected)"
+  },
+  "scenario_summary": {
+    "total_scenarios": 6,
+    "attack_scenarios": 5,
+    "normal_scenarios": 1,
+    "total_packets": 288
+  },
+  "scenarios": [
+    {
+      "scenario_name": "normal_arp",
+      "description": "Normal ARP traffic with consistent IP-MAC mappings, standard request/reply patterns, and reasonable timing.",
+      "expected_detection": false,
+      "actual_detected": false,
+      "expected_severity": "NONE",
+      "detection_status": "PASS",
+      "detection_reason": "",
+      "detected_attacker_ip": "",
+      "detected_attacker_mac": "",
+      "detection_latency_ms": null,
+      "num_events": 0,
+      "total_packets": 60
+    },
+    {
+      "scenario_name": "ip_mac_conflict",
+      "description": "A previously known IP address suddenly appears with a different MAC address, simulating an ARP cache poisoning attempt.",
+      "expected_detection": true,
+      "actual_detected": true,
+      "expected_severity": "MEDIUM",
+      "detection_status": "PASS",
+      "detection_reason": "Abnormal ARP rate from 00:11:22:33:44:10: 52 packets in last minute",
+      "detected_attacker_ip": "192.168.1.10",
+      "detected_attacker_mac": "00:11:22:33:44:10",
+      "detection_latency_ms": 3.2967,
+      "num_events": 5,
+      "total_packets": 35
+    },
+    {
+      "scenario_name": "gateway_spoofing",
+      "description": "An attacker forges ARP replies claiming to be the network gateway with a malicious MAC address.",
+      "expected_detection": true,
+      "actual_detected": false,
+      "expected_severity": "CRITICAL",
+      "detection_status": "FAIL",
+      "detection_reason": "",
+      "detected_attacker_ip": "",
+      "detected_attacker_mac": "",
+      "detection_latency_ms": null,
+      "num_events": 0,
+      "total_packets": 25
+    },
+    {
+      "scenario_name": "duplicate_ip",
+      "description": "Multiple different MAC addresses claim the same IP address, which should trigger DUPLICATE_IP_CLAIM detection.",
+      "expected_detection": true,
+      "actual_detected": true,
+      "expected_severity": "HIGH",
+      "detection_status": "PASS",
+      "detection_reason": "Abnormal ARP rate from 00:11:22:33:44:10: 62 packets in last minute",
+      "detected_attacker_ip": "192.168.1.10",
+      "detected_attacker_mac": "00:11:22:33:44:10",
+      "detection_latency_ms": 2.4703,
+      "num_events": 9,
+      "total_packets": 11
+    },
+    {
+      "scenario_name": "suspicious_replies",
+      "description": "Unsolicited ARP replies with forged MAC addresses sent without any preceding ARP request.",
+      "expected_detection": true,
+      "actual_detected": true,
+      "expected_severity": "MEDIUM",
+      "detection_status": "PASS",
+      "detection_reason": "Abnormal ARP rate from 00:11:22:33:44:10: 72 packets in last minute",
+      "detected_attacker_ip": "192.168.1.10",
+      "detected_attacker_mac": "00:11:22:33:44:10",
+      "detection_latency_ms": 3.1055,
+      "num_events": 4,
+      "total_packets": 27
+    },
+    {
+      "scenario_name": "high_arp_rate",
+      "description": "A single MAC address sends ARP packets at an abnormally high rate, simulating an ARP flood / DDoS precursor.",
+      "expected_detection": true,
+      "actual_detected": true,
+      "expected_severity": "HIGH",
+      "detection_status": "PASS",
+      "detection_reason": "Abnormal ARP rate from 00:11:22:33:44:10: 80 packets in last minute",
+      "detected_attacker_ip": "192.168.1.10",
+      "detected_attacker_mac": "00:11:22:33:44:10",
+      "detection_latency_ms": 66.5402,
+      "num_events": 213,
+      "total_packets": 130
+    }
+  ],
+  "detection_metrics": {
+    "total_scenarios": 6,
+    "true_positives": 4,
+    "true_negatives": 1,
+    "false_positives": 0,
+    "false_negatives": 1,
+    "accuracy": 0.8333,
+    "detection_rate": 0.8,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.2,
+    "precision": 1.0,
+    "recall": 0.8,
+    "f1_score": 0.8889
+  },
+  "timing_metrics": {
+    "samples": 4,
+    "average_detection_time_ms": 18.85,
+    "min_detection_time_ms": 2.47,
+    "max_detection_time_ms": 66.54,
+    "median_detection_time_ms": 3.2,
+    "stddev_detection_time_ms": 31.79
+  },
+  "false_positive_analysis": {
+    "total_false_positives": 0,
+    "total_false_negatives": 1,
+    "false_positive_scenarios": [],
+    "false_negative_scenarios": [
+      {
+        "scenario": "gateway_spoofing",
+        "missed_event_types": [
+          "GATEWAY_MAPPING_CHANGE"
+        ]
+      }
+    ],
+    "false_positives_by_rule": {},
+    "false_negatives_by_expected_type": {
+      "GATEWAY_MAPPING_CHANGE": 1
+    }
+  },
+  "ddos_impact_analysis": {
+    "traffic_comparison": {
+      "normal": {
+        "label": "normal",
+        "total_packets": 60,
+        "requests": 30,
+        "replies": 30,
+        "request_reply_ratio": 1.0,
+        "unique_source_ips": 7,
+        "unique_source_macs": 7,
+        "unique_target_ips": 7,
+        "conflicting_ip_mac_mappings": 0,
+        "duration_seconds": 125.3,
+        "packets_per_second": 0.48
+      },
+      "abnormal": {
+        "label": "abnormal",
+        "total_packets": 228,
+        "requests": 176,
+        "replies": 52,
+        "request_reply_ratio": 3.3846,
+        "unique_source_ips": 8,
+        "unique_source_macs": 15,
+        "unique_target_ips": 104,
+        "conflicting_ip_mac_mappings": 4,
+        "duration_seconds": 24.67,
+        "packets_per_second": 9.24
+      },
+      "deltas": {
+        "total_packets": 168,
+        "requests": 146,
+        "replies": 22,
+        "packets_per_second": 8.76,
+        "conflicting_ip_mac_mappings": 4,
+        "unique_source_macs": 8
+      },
+      "impact_summary": [
+        "ARP packet rate increased 19.2x during abnormal conditions (9.2 vs 0.5 pps)",
+        "IP-MAC conflicts rose from 0 to 4 during the attack, indicating active ARP spoofing",
+        "Number of unique source MACs increased from 7 to 15, suggesting forged MAC addresses on the network"
+      ]
+    },
+    "detection_summary": {
+      "total_events": 231,
+      "by_severity": {
+        "HIGH": 144,
+        "CRITICAL": 87
+      },
+      "by_event_type": {
+        "UNUSUAL_ARP_ACTIVITY": 42,
+        "DUPLICATE_IP_CLAIM": 4,
+        "ARP_REQUEST_STORM": 100,
+        "MAC_FLOODING": 85
+      },
+      "affected_ips": [
+        "192.168.1.50",
+        "192.168.1.200",
+        "192.168.1.10"
+      ],
+      "affected_macs": [
+        "03:51:d8:ae:8e:4f",
+        "d6:70:e5:8e:03:51",
+        "b9:62:23:17:74:94",
+        "ac:34:2f:c2:31:b7",
+        "87:16:eb:3f:c1:28",
+        "00:11:22:33:44:10"
+      ],
+      "affected_device_count": 3
+    },
+    "detection_time_ms": 18.85,
+    "ddos_impact_analysis": {
+      "data_source": "controlled synthetic evaluation",
+      "normal_arp_rate": 0.48,
+      "suspicious_arp_rate": 9.24,
+      "rate_increase_percent": 1825.0,
+      "affected_hosts": 8,
+      "affected_ips": [
+        "192.168.1.1",
+        "192.168.1.10",
+        "192.168.1.11",
+        "192.168.1.12",
+        "192.168.1.14",
+        "192.168.1.15",
+        "192.168.1.200",
+        "192.168.1.50"
+      ],
+      "affected_macs": [
+        "00:11:22:33:44:10",
+        "00:11:22:33:44:11",
+        "00:11:22:33:44:12",
+        "00:11:22:33:44:14",
+        "00:11:22:33:44:15",
+        "03:51:d8:ae:8e:4f",
+        "0d:65:d6:70:e5:8e",
+        "2c:d8:10:0f:2f:6f",
+        "4f:6e:ac:34:2f:c2",
+        "51:d8:ae:8e:4f:6e",
+        "87:16:eb:3f:c1:28",
+        "aa:bb:cc:dd:ee:01",
+        "ac:34:2f:c2:31:b7",
+        "b9:62:23:17:74:94",
+        "d6:70:e5:8e:03:51"
+      ],
+      "suspicious_events": 168,
+      "attack_duration_seconds": 24.67,
+      "detection_latency_ms": 18.85,
+      "conflicting_mappings": 4,
+      "pre_mitigation_disruption": 0.5727,
+      "post_mitigation_disruption": null,
+      "improvement_percent": null,
+      "post_mitigation_note": "Person 4 mitigation data not available for this evaluation."
+    },
+    "phase_comparison": {
+      "normal": {
+        "arp_rate_pps": 0.48,
+        "suspicious_events": 0,
+        "affected_hosts": 7,
+        "disruption_indicator": 0.1064
+      },
+      "suspicious_activity": {
+        "arp_rate_pps": 9.24,
+        "suspicious_events": 168,
+        "affected_hosts": 8,
+        "disruption_indicator": 0.5727
+      },
+      "post_mitigation": {
+        "note": "Person 4 mitigation data not yet available."
+      }
+    },
+    "mitigation": {
+      "triggered": true,
+      "start_time": "2026-10-07T11:47:19.561462",
+      "end_time": null,
+      "action_taken": "ISOLATE_DEVICE",
+      "result": "SUCCESS",
+      "devices_before": 5,
+      "devices_after": 4
+    }
+  },
+  "limitations": [
+    "All tests use simulated packet data, not live captures",
+    "Detection timing is measured within the simulation clock",
+    "Person 4 mitigation data may not be available for all runs",
+    "Results should be validated in an authorised lab environment",
+    "ARP spoofing and DDoS are distinct attacks \u2014 this module evaluates network-disruption impact, not DDoS attribution"
+  ],
+  "conclusions": [
+    "Detection rate is 80% \u2014 adequate but some attack patterns are missed",
+    "Zero false positives observed across all normal traffic scenarios",
+    "Overall F1 score: 0.8889",
+    "Average detection latency: 18.9 ms"
+  ]
+}
