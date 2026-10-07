@@ -84,15 +84,15 @@ See [`ml/README.md`](ml/README.md) for detailed documentation.
 
 ---
 
-## 👥 Team Members & Responsibilities
+## 👥 Team Responsibilities
 
-| Name | Reg. No | Core Responsibility |
-| :--- | :--- | :--- |
-| **Chintanika M** | 23BCY10056 | Core Architecture & Network Monitoring (`network/`) |
-| **Rishima Sharma** | 23BCY10076 | Detection Engine & Rule-Based Heuristics (`detection/`) |
-| **Anju Kumari** | 23BCY10022 | Testing, Evaluation & Experimental ML (`testing/`, `ml/`) |
-| **Akshay Singh** | 23BCY10141 | Prevention, Mitigation & Recovery Actions (`prevention/`) |
-| **Oveiya K** | 23BCY10129 | Backend API, Database, and Security Dashboard (`backend/`, `dashboard/`) |
+| Role | Core Responsibility |
+| :--- | :--- |
+| **Person 1** | Core Architecture & Network Monitoring (`network/`) |
+| **Person 2** | Detection Engine & Rule-Based Heuristics (`detection/`) |
+| **Person 3** | Testing, Evaluation & Experimental ML (`testing/`, `ml/`) |
+| **Person 4** | Prevention, Mitigation & Recovery Actions (`prevention/`) |
+| **Person 5** | Backend API, Database, and Security Dashboard (`backend/`, `dashboard/`) |
 
 ---
 
