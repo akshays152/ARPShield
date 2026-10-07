@@ -267,12 +267,12 @@ def slide_01_hero(prs):
              font_size=14, color=ACCENT_CYAN)
     
     # 6. Team members
-    team1 = "Chintanika M  •  Rishima Sharma  •  Anju Kumari"
-    team2 = "Akshay Singh  •  Oveiya K"
-    add_text(slide, team1, Inches(0.8), Inches(6.3), Inches(10.0), Inches(0.3),
-             font_size=11, color=TEXT_DIM)
-    add_text(slide, team2, Inches(0.8), Inches(6.6), Inches(10.0), Inches(0.3),
-             font_size=11, color=TEXT_DIM)
+    team1 = "Chintanika M (23BCY10056)  •  Rishima Sharma (23BCY10231)  •  Anju Kumari (23BCY10267)"
+    team2 = "Akshay Singh (23BCY10283)  •  Oveiya K (23BCY10309)"
+    add_text(slide, team1, Inches(0.8), Inches(6.3), Inches(12.0), Inches(0.3),
+             font_size=10, color=TEXT_DIM)
+    add_text(slide, team2, Inches(0.8), Inches(6.6), Inches(12.0), Inches(0.3),
+             font_size=10, color=TEXT_DIM)
 
 
 def slide_02_problem(prs):
@@ -1401,13 +1401,18 @@ def main():
     
     output_dir = os.path.join(os.path.dirname(__file__), "final_evaluation")
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "ARPShield_Final_Presentation.pptx")
     
-    try:
-        prs.save(output_path)
-    except PermissionError:
-        output_path = os.path.join(output_dir, "ARPShield_Final_Presentation_V3.pptx")
-        prs.save(output_path)
+    base_name = "ARPShield_Final_Presentation"
+    output_path = os.path.join(output_dir, f"{base_name}.pptx")
+    version = 3
+    
+    while True:
+        try:
+            prs.save(output_path)
+            break
+        except PermissionError:
+            version += 1
+            output_path = os.path.join(output_dir, f"{base_name}_V{version}.pptx")
     
     print(f"Presentation saved to: {output_path}")
     print(f"Total slides: {len(prs.slides)}")
