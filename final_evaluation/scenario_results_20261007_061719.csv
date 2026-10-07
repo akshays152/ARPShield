@@ -1,0 +1,7 @@
+scenario_name,description,expected_detection,actual_detected,expected_severity,detection_status,detection_reason,detected_attacker_ip,detected_attacker_mac,detection_latency_ms,num_events,total_packets
+normal_arp,"Normal ARP traffic with consistent IP-MAC mappings, standard request/reply patterns, and reasonable timing.",False,False,NONE,PASS,,,,,0,60
+ip_mac_conflict,"A previously known IP address suddenly appears with a different MAC address, simulating an ARP cache poisoning attempt.",True,True,MEDIUM,PASS,Abnormal ARP rate from 00:11:22:33:44:10: 52 packets in last minute,192.168.1.10,00:11:22:33:44:10,3.2967,5,35
+gateway_spoofing,An attacker forges ARP replies claiming to be the network gateway with a malicious MAC address.,True,False,CRITICAL,FAIL,,,,,0,25
+duplicate_ip,"Multiple different MAC addresses claim the same IP address, which should trigger DUPLICATE_IP_CLAIM detection.",True,True,HIGH,PASS,Abnormal ARP rate from 00:11:22:33:44:10: 62 packets in last minute,192.168.1.10,00:11:22:33:44:10,2.4703,9,11
+suspicious_replies,Unsolicited ARP replies with forged MAC addresses sent without any preceding ARP request.,True,True,MEDIUM,PASS,Abnormal ARP rate from 00:11:22:33:44:10: 72 packets in last minute,192.168.1.10,00:11:22:33:44:10,3.1055,4,27
+high_arp_rate,"A single MAC address sends ARP packets at an abnormally high rate, simulating an ARP flood / DDoS precursor.",True,True,HIGH,PASS,Abnormal ARP rate from 00:11:22:33:44:10: 80 packets in last minute,192.168.1.10,00:11:22:33:44:10,66.5402,213,130
